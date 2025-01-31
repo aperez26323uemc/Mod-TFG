@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public class DroneMenu extends AbstractContainerMenu implements Supplier<Map<Integer, Slot>> {
+    public final static String ID = "drone_menu";
     public final static HashMap<String, Object> guistate = new HashMap<>();
     public final Level world;
     public final Player entity;

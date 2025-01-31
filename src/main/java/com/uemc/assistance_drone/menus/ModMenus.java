@@ -13,5 +13,5 @@ public class ModMenus {
             DeferredRegister.create(Registries.MENU, AssistanceDrone.MODID);
 
     public static final Supplier<MenuType<DroneMenu>> DRONE_MENU =
-            MENU_TYPES.register("drone_menu", () -> IMenuTypeExtension.create(DroneMenu::new));
+            MENU_TYPES.register(DroneMenu.ID, () -> IMenuTypeExtension.create(DroneMenu::new));
 }

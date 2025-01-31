@@ -1,10 +1,10 @@
-package com.uemc.assistance_drone.client;
+package com.uemc.assistance_drone;
 
 import com.mojang.logging.LogUtils;
-import com.uemc.assistance_drone.AssistanceDrone;
-import com.uemc.assistance_drone.client.gui.DroneMenuScreen;
+import com.uemc.assistance_drone.entities.client.DroneEntityModel;
+import com.uemc.assistance_drone.menus.client.DroneMenuScreen;
 import com.uemc.assistance_drone.entities.ModEntities;
-import com.uemc.assistance_drone.menus.DroneMenu;
+import com.uemc.assistance_drone.entities.client.DroneEntityRenderer;
 import com.uemc.assistance_drone.menus.ModMenus;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
@@ -14,7 +14,6 @@ import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 import org.slf4j.Logger;
-import com.uemc.assistance_drone.entities.drone.DroneEntityRenderer;
 
 
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
@@ -27,6 +26,10 @@ public class ClientSetup {
         // Some client setup code
         LOGGER.info("HELLO FROM CLIENT SETUP");
         LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+    }
+    @SubscribeEvent
+    public static void onRegisterLayers(EntityRenderersEvent.RegisterLayerDefinitions event) {
+        event.registerLayerDefinition(DroneEntityModel.LAYER_LOCATION, DroneEntityModel::createBodyLayer);
     }
     @SubscribeEvent
     public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {

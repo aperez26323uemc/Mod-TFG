@@ -1,4 +1,4 @@
-package com.uemc.assistance_drone.client.gui;
+package com.uemc.assistance_drone.menus.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.uemc.assistance_drone.menus.DroneMenu;
