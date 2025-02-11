@@ -1,68 +1,92 @@
 package com.uemc.assistance_drone.menus;
 
-import net.minecraft.core.BlockPos;
+import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.Level;
-import net.neoforged.neoforge.items.IItemHandler;
-import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Supplier;
 
-public class DroneMenu extends AbstractContainerMenu implements Supplier<Map<Integer, Slot>> {
+public class DroneMenu extends AbstractContainerMenu {
     public final static String ID = "drone_menu";
-    public final static HashMap<String, Object> guistate = new HashMap<>();
-    public final Level world;
-    public final Player entity;
-    public int x, y, z;
-    private ContainerLevelAccess access;
-    private IItemHandler internal;
-    private final Map<Integer, Slot> customSlots = new HashMap<>();
-    private boolean bound = false;
-    private Supplier<Boolean> boundItemMatcher = null;
-    private Entity boundEntity = null;
+    private final static int ROWS = 3;
+    private final static int COLUMNS = 4;
+    private final DroneEntity drone;
 
-    public DroneMenu(int id, Inventory inv, FriendlyByteBuf extraData) {
+    public DroneMenu(int id, Inventory playerInventory, FriendlyByteBuf packetBuffer) {
         super(ModMenus.DRONE_MENU.get(), id);
-        this.entity = inv.player;
-        this.world = inv.player.level();
-        this.internal = new ItemStackHandler(0);
-        BlockPos pos = null;
-        if (extraData != null) {
-            pos = extraData.readBlockPos();
-            this.x = pos.getX();
-            this.y = pos.getY();
-            this.z = pos.getZ();
-            access = ContainerLevelAccess.create(world, pos);
+
+        // Obtener el inventario del dron a partir del ID de la entidad
+        int droneId = packetBuffer.readVarInt();
+        this.drone = (DroneEntity) playerInventory.player.level().getEntity(droneId);
+
+        if (drone == null) {
+            return;
+        }
+
+        // Añadir los slots del dron
+        for (int row = 0; row < ROWS; ++row) {
+            for (int col = 0; col < COLUMNS; ++col) {
+                this.addSlot(new Slot(this.drone, col + row * COLUMNS, 167 + col * 18, 18 + row * 18));
+            }
+        }
+
+        // Añadir las ranuras del inventario del jugador
+        // Inventario superior
+        for (int row = 0; row < 3; ++row) {
+            for (int col = 0; col < 9; ++col) {
+                this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 77 + col * 18, 84 + row * 18));
+            }
+        }
+        // Inventario inferior (hotbar)
+        for (int col = 0; col < 9; ++col) {
+            this.addSlot(new Slot(playerInventory, col, 77 + col * 18, 142));
         }
     }
 
+    /**
+     * Handle when the stack in slot {@code pIndex} is shift-clicked. Normally this moves the stack between the player inventory and the other inventory(s).
+     */
+    @Override
+    public @NotNull ItemStack quickMoveStack(@NotNull Player pPlayer, int pIndex) {
+        ItemStack itemstack = ItemStack.EMPTY;
+        Slot slot = this.slots.get(pIndex);
+        if (slot.hasItem()) {
+            ItemStack itemstack1 = slot.getItem();
+            itemstack = itemstack1.copy();
+            if (pIndex < ROWS*COLUMNS) {
+                // Del dron al inventario
+                if (!this.moveItemStackTo(itemstack1, ROWS*COLUMNS, this.slots.size(), false)) {
+                    return ItemStack.EMPTY;
+                }
+                // Del inventario al dron
+            } else if (!this.moveItemStackTo(itemstack1, 0, ROWS*COLUMNS, false)) {
+                return ItemStack.EMPTY;
+            }
+
+            if (itemstack1.isEmpty()) {
+                slot.setByPlayer(ItemStack.EMPTY);
+            } else {
+                slot.setChanged();
+            }
+        }
+
+        return itemstack;
+    }
+
+    /**
+     * Verifica si el menú sigue siendo válido para el jugador.
+     */
     @Override
     public boolean stillValid(@NotNull Player player) {
-        if (this.bound) {
-            if (this.boundItemMatcher != null)
-                return this.boundItemMatcher.get();
-            else if (this.boundEntity != null)
-                return this.boundEntity.isAlive();
-        }
-        return true;
+        return this.drone.stillValid(player);
     }
 
-    @Override
-    public @NotNull ItemStack quickMoveStack(@NotNull Player playerIn, int index) {
-        return ItemStack.EMPTY;
+    public DroneEntity getDrone() {
+        return this.drone;
     }
 
-    public Map<Integer, Slot> get() {
-        return customSlots;
-    }
 }

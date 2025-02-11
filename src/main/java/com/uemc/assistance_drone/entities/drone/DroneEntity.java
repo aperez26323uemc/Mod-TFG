@@ -2,87 +2,343 @@ package com.uemc.assistance_drone.entities.drone;
 
 import com.uemc.assistance_drone.menus.DroneMenu;
 import io.netty.buffer.Unpooled;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.ContainerEntity;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Supplier;
 
-public class DroneEntity extends Entity {
+public class DroneEntity extends Entity implements ContainerEntity {
 
     public static final String ID = "drone";
+    private static final float DRONE_WIDTH = 0.7F;
+    private static final float DRONE_HEIGHT = 0.6F;
 
-    @NotNull protected String state;
-
-    public final AnimationState bladeAnimation = new AnimationState();
-
-    // Variables para manejar el objetivo de movimiento y mirada
-    private Vec3 targetPosition = new Vec3(0, 0, 0); // Objetivo actual (x, y, z)
-
-    // Variables de velocidad para cada eje
-    private double velocityX = 0.0;
-    private double velocityY = 0.0;
-    private double velocityZ = 0.0;
-
-    public DroneEntity(EntityType<? extends DroneEntity> type, Level level) {
-        super(type, level);
-        state = "IDLE";
-    }
-
+    /// Supplier utilizado para registrar la entidad
     public static Supplier<EntityType<DroneEntity>> ENTITY_TYPE_SUPPLIER =
             () -> EntityType.Builder.of(DroneEntity::new, MobCategory.MISC)
-                    .sized(0.7F, 0.6F)
+                    .sized(DRONE_WIDTH, DRONE_HEIGHT)
                     .build(ID);
+
+    /// Constructor
+    public DroneEntity(EntityType<? extends DroneEntity> type, Level level) {
+        super(type, level);
+        DroneStateList.registerState(new DroneState("IDLE"));
+        DroneStateList.registerState(new DroneState("FOLLOW"));
+        this.blocksBuilding = true;
+        this.noPhysics = false;
+    }
+
+    @Override
+    public boolean isPushable() {
+        return true;
+    }
+
+    /// Datos síncronos ////////////////////////////////////////
+
+    private static final EntityDataAccessor<String> STATE =
+            SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Optional<UUID>> OWNER =
+            SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private NonNullList<ItemStack> itemStacks = NonNullList.withSize(12, ItemStack.EMPTY);
+
+    @Override
+    protected void defineSynchedData(SynchedEntityData.Builder builder) {
+        builder.define(STATE, "IDLE")
+               .define(OWNER, Optional.empty());
+    }
+
+    public UUID getOwnerUUID() {
+        return this.entityData.get(OWNER).orElse(null);
+    }
+
+    public Player getOwner() {
+        UUID uuid = getOwnerUUID();
+        return uuid != null ? level().getPlayerByUUID(uuid) : null;
+    }
+
+    public void setOwner(Player player) {
+        this.entityData.set(OWNER, Optional.of(player.getUUID()));
+    }
+
+    @Override
+    public void addAdditionalSaveData(@NotNull CompoundTag compound) {
+        compound.putString("State", this.getState());
+        addChestVehicleSaveData(compound, this.registryAccess());
+        if (getOwnerUUID() != null) {
+            compound.putUUID("Owner", getOwnerUUID());
+        }
+    }
+
+    @Override
+    public void readAdditionalSaveData(@NotNull CompoundTag compound) {
+        if (compound.contains("State", 8)) { // 8 es el tipo para String
+            String savedState = compound.getString("State");
+            this.setState(savedState);
+        }
+        if (compound.hasUUID("Owner")) {
+            this.entityData.set(OWNER, Optional.of(compound.getUUID("Owner")));
+        }
+        readChestVehicleSaveData(compound, this.registryAccess());
+    }
+
+    public String getState() {
+        return this.entityData.get(STATE);
+    }
+
+    public void setState(String newState) {
+        this.getEntityData().set(STATE, newState);
+    }
+
+
+    ///Animaciones ////////////////////////////////////////
+    public final AnimationState bladeAnimation = new AnimationState();
+
+
+    /// Variables para manejar el movimiento del dron
+    private Vec3 targetPosition = new Vec3(0, 0, 0);
+    public void setTargetPosition(double x, double y, double z) {
+        this.targetPosition = new Vec3(x, y, z);
+    }
+    private static final double MAX_HORIZONTAL_SPEED = 0.3;
+    private static final double MAX_VERTICAL_SPEED = 0.15;
+    private List<BlockPos> currentPath = new ArrayList<>();
+    private int currentPathIndex = 0;
+    private static final int PATH_UPDATE_INTERVAL = 20;
+    private int pathUpdateTimer = 0;
+
+
+    /// Funcionalidad ////////////////////////////////////////
 
     @Override
     public void tick() {
-        super.tick();
+        pushEntities();
         stateManager();
-        performMovementAndLook();
+        interpolatePosRot();
+        super.tick();
     }
 
-    private void stateManager() {
-        if (this.state.equals("OFF")){
-            this.bladeAnimation.stop();
-            return;
-        }
-        this.bladeAnimation.startIfStopped(tickCount);
-        if(this.state.equals("IDLE")) {
-            updateTarget();
+    protected void pushEntities() {
+        List<Entity> list = this.level().getEntities(this, this.getBoundingBox(), EntitySelector.pushableBy(this));
+        for (Entity entity1 : list) {
+            this.push(entity1);
         }
     }
 
     /**
-     * Actualiza el objetivo del dron basado en la lógica actual.
-     * Puedes expandir esta lógica para incluir diferentes estados o condiciones.
+     * DO NOT OVERWRITE (Inject only at tail)
+     * <p>
+     * Maneja los estados y el comportamiento
      */
+    private void stateManager() {
+        if(!DroneStateList.isValidState(this.getState())) {
+            this.setState("IDLE");
+        }
+        this.bladeAnimation.startIfStopped(tickCount);
+        if(this.getState().equals("IDLE")) {
+            if(!level().isClientSide()) {
+                updateTarget();
+                moveToPos(targetPosition, false, true);
+                lookAtPos(targetPosition);
+            }
+        }
+        if (this.getState().equals("FOLLOW")) {
+            if(!level().isClientSide()){
+                updateFollowTarget();
+                updatePath();
+                followPath();
+                lookAtPos(targetPosition);
+            }
+        }
+    }
+
+
+    /// CLIENT INTERPOLATION ///
+
+    @OnlyIn(Dist.CLIENT)
+    private int lerpSteps = 0;
+    @OnlyIn(Dist.CLIENT)
+    private double lerpX, lerpY, lerpZ;
+    @OnlyIn(Dist.CLIENT)
+    private float lerpYRot, lerpXRot;
+
+    @OnlyIn(Dist.CLIENT)
+    @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
+        // When a network packet arrives, store the target state
+        this.lerpX = x;
+        this.lerpY = y;
+        this.lerpZ = z;
+        this.lerpYRot = yRot;
+        this.lerpXRot = xRot;
+        this.lerpSteps = steps;
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    private void interpolatePosRot() {
+        // Only run interpolation on the client side
+        if (this.level().isClientSide && lerpSteps > 0) {
+            // Calculate the fraction for this tick.
+            double fraction = 1.0 / (double) lerpSteps;
+
+            // Interpolate positions.
+            double newX = Mth.lerp(fraction, this.getX(), lerpX);
+            double newY = Mth.lerp(fraction, this.getY(), lerpY);
+            double newZ = Mth.lerp(fraction, this.getZ(), lerpZ);
+
+            // For rotations, use the rotLerp helper to correctly wrap angles.
+            float newYRot = Mth.rotLerp((float) fraction, this.getYRot(), lerpYRot);
+            float newXRot = Mth.rotLerp((float) fraction, this.getXRot(), lerpXRot);
+
+            // Update the entity's position and rotation.
+            this.setPos(newX, newY, newZ);
+            this.setYRot(newYRot);
+            this.setXRot(newXRot);
+
+            // Decrement the interpolation counter.
+            lerpSteps--;
+        }
+    }
+
+    /// COMMON MOVEMENT ///
+
+    private void lookAtPos(Vec3 targetPos) {
+        // Vector desde el dron hasta el objetivo
+        double dx = targetPos.x - this.getX();
+        double dz = targetPos.z - this.getZ();
+
+        // Calcular yaw (rotación horizontal)
+        float desiredYaw = (float) (Math.atan2(dz, dx) * 180.0 / Math.PI) - 90F;
+        // Se mantiene el offset de 90° como se requiere
+
+        // Interpolación suave del yaw:
+        float currentYaw = this.getYRot();
+        float angleDifference = Mth.wrapDegrees(desiredYaw - currentYaw);
+        float smoothFactor = 0.5F;
+        float newYaw = currentYaw + smoothFactor * angleDifference;
+
+        // Asignar la rotación suavizada en lugar de la directa
+        this.setYRot(newYaw);
+    }
+
+    private void moveToPos(Vec3 targetPos, boolean allowXZ, boolean allowBounce) {
+        Vec3 newVelocity = calculateVelocity(targetPos, allowXZ, allowBounce);
+        setDeltaMovement(newVelocity);
+        move(MoverType.SELF, getDeltaMovement());
+    }
+
+    private Vec3 calculateVelocity(Vec3 targetPos, boolean allowXZ, boolean allowBounce) {
+        if (allowBounce) {}
+            return calculateBounceVelocity(targetPos, allowXZ);
+        /*} else {
+            return calculateSmoothVelocity(targetPos, allowXZ);
+        }*/
+    }
+
+    private Vec3 calculateBounceVelocity(Vec3 targetPos, boolean allowXZ) {
+        double dt = 1.0 / 20.0;
+        Vec3 currentVel = getDeltaMovement();
+
+        double dx = allowXZ ? targetPos.x - getX() : 0.0;
+        double dz = allowXZ ? targetPos.z - getZ() : 0.0;
+        double dy = targetPos.y - getY();
+
+        // PD Controller for bounce mode
+        double k = 0.2, d = 0.6;
+        double ax = allowXZ ? (k * dx - d * 1.5 * currentVel.x) : 0.0;
+        double az = allowXZ ? (k * dz - d * 1.5 * currentVel.z) : 0.0;
+        double ay = k * dy - d * currentVel.y;
+
+        Vec3 acceleration = new Vec3(ax, ay, az);
+        Vec3 newVelocity = currentVel.add(acceleration.scale(dt));
+
+        // Clamp velocities
+        return new Vec3(
+                allowXZ ? Mth.clamp(newVelocity.x, -MAX_HORIZONTAL_SPEED, MAX_HORIZONTAL_SPEED) : 0.0,
+                Mth.clamp(newVelocity.y, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED),
+                allowXZ ? Mth.clamp(newVelocity.z, -MAX_HORIZONTAL_SPEED, MAX_HORIZONTAL_SPEED) : 0.0
+        );
+    }
+
+    /*private Vec3 calculateSmoothVelocity(Vec3 targetPos, boolean allowXZ) {
+        double horizontalGain = 0.3;
+        double verticalGain = 0.1;
+
+        double dx = allowXZ ? targetPos.x - getX() : 0.0;
+        double dz = allowXZ ? targetPos.z - getZ() : 0.0;
+        double dy = targetPos.y - getY();
+
+        double desiredVx = allowXZ ? dx * horizontalGain : 0.0;
+        double desiredVz = allowXZ ? dz * horizontalGain : 0.0;
+        double desiredVy = dy * verticalGain;
+
+        return new Vec3(
+                Mth.clamp(desiredVx, -MAX_HORIZONTAL_SPEED, MAX_HORIZONTAL_SPEED),
+                Mth.clamp(desiredVy, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED),
+                Mth.clamp(desiredVz, -MAX_HORIZONTAL_SPEED, MAX_HORIZONTAL_SPEED)
+        );
+    }*/
+
+    private double verticalRaycast(double x, double y, double z, boolean upwards) {
+        double rayLength = 10.0;
+        Vec3 from = new Vec3(x, y, z);
+        Vec3 to = new Vec3(x, upwards ? y + rayLength : y - rayLength, z);
+
+        BlockHitResult result = level().clip(new ClipContext(
+                from, to,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.ANY,
+                this
+        ));
+
+        return result.getType() == HitResult.Type.BLOCK
+                ? result.getLocation().y
+                : (upwards ? level().getMaxBuildHeight() : level().getMinBuildHeight());
+    }
+
+
+    /// STATE IDLE ///
+
     private void updateTarget() {
-        double floorY = findFloorWithRaycast(this.getX(), this.getY(), this.getZ());
-        double maxY = findCeilingWithRaycast(this.getX(), this.getY(), this.getZ()) - 0.75;
+        double floorY = verticalRaycast(this.getX(), this.getY(), this.getZ(), false);
+        double maxY = verticalRaycast(this.getX(), this.getY(), this.getZ(), true) - 0.75;
 
         double desiredY = floorY + 1.5;
         // Mantener la misma X y Z
         double targetX = this.targetPosition.x;
         double targetZ = this.targetPosition.z;
-        // Si hay jugadores cerca, intentar igualar la altura de sus ojos
+        // Si hay un jugador cerca, le fija como target
         double radius = 8.0;
         Player nearestPlayer = this.level().getNearestPlayer(this, radius);
         if (nearestPlayer != null) {
@@ -90,152 +346,95 @@ public class DroneEntity extends Entity {
             targetX = nearestPlayer.getX();
             targetZ = nearestPlayer.getZ();
         }
-        double targetYFinal = Math.clamp(desiredY, Math.min(floorY + 1.0, maxY), maxY);
+        double targetYFinal = Mth.clamp(desiredY, Math.min(floorY + 1.0, maxY), maxY);
 
         setTargetPosition(targetX, targetYFinal, targetZ);
     }
 
-    /**
-     * Establece el objetivo del dron.
-     *
-     * @param x Coordenada X del objetivo
-     * @param y Coordenada Y del objetivo
-     * @param z Coordenada Z del objetivo
-     */
-    public void setTargetPosition(double x, double y, double z) {
-        this.targetPosition = new Vec3(x, y, z);
+
+    /// STATE FOLLOW ///
+
+    private void updateFollowTarget() {
+        double targetX = getOwner().getX();
+        double targetZ = getOwner().getZ();
+        double desiredY = getOwner().getEyeY();
+
+        double floorY = verticalRaycast(targetX, desiredY, targetZ, false);
+        double maxY = verticalRaycast(targetX, desiredY, targetZ, true) - 0.75;
+
+        // Mantener la misma X y Z
+        double targetYFinal = Mth.clamp(desiredY, Math.min(floorY + 1.0, maxY), maxY);
+
+        setTargetPosition(targetX, targetYFinal, targetZ);
     }
 
-    /**
-     * Realiza el movimiento y la rotación hacia el objetivo.
-     */
-    private void performMovementAndLook() {
-        moveToPos(targetPosition, false);
-        lookAtPos(targetPosition);
-    }
+    private void updatePath() {
+        if (pathUpdateTimer-- <= 0) {
+            BlockPos targetPos = new BlockPos(
+                    Mth.floor(targetPosition.x),
+                    Mth.floor(targetPosition.y),
+                    Mth.floor(targetPosition.z)
+            );
 
-    /**
-     * Gira el dron para mirar hacia una posición específica.
-     *
-     * @param targetPos Objeto Vec3 que representa la posición del objetivo
-     */
-    public void lookAtPos(Vec3 targetPos) {
-        // Vector desde el dron hasta el objetivo
-        double dx = targetPos.x - this.getX();
-        double dz = targetPos.z - this.getZ();
-        double dy = targetPos.y - this.getY();
+            DronePathFinder pathfinder = new DronePathFinder(
+                    this.level(),
+                    this.blockPosition(),
+                    targetPos
+            );
 
-        // Calcular yaw (rotación horizontal)
-        float desiredYaw = (float) (Math.atan2(dz, dx) * (180.0 / Math.PI)) - 90.0F;
+            currentPath = pathfinder.findPath();
+            currentPathIndex = 0;
+            pathUpdateTimer = PATH_UPDATE_INTERVAL;
 
-        // Calcular pitch (rotación vertical), limitada a ±5 grados
-        float horizontalDist = (float)Math.sqrt(dx * dx + dz * dz);
-        float desiredPitch = (float)(-Math.atan2(dy, horizontalDist) * (180.0 / Math.PI));
-        float maxPitch = 5.0F;
-        desiredPitch = Mth.clamp(desiredPitch, -maxPitch, maxPitch);
-
-        // Asignar rotaciones a la entidad
-        this.setYRot(desiredYaw);
-        this.setXRot(desiredPitch);
-    }
-
-    public void moveToPos(Vec3 targetPos, boolean allowXZ) {
-        double desiredX = targetPos.x;
-        double desiredY = targetPos.y;
-        double desiredZ = targetPos.z;
-
-        // Calcular diferencias solo si el movimiento está permitido en el eje
-        double deltaX = allowXZ ? desiredX - this.getX() : 0.0;
-        double deltaY = desiredY - this.getY(); // Movimiento vertical siempre permitido
-        double deltaZ = allowXZ ? desiredZ - this.getZ() : 0.0;
-
-        double k = 0.4; // Constante del resorte
-        double d = 0.4; // Constante de amortiguación
-        float dt = 1.0F / 20.0F; // Tiempo por tick (20 ticks por segundo)
-
-        // Calcular aceleración por eje, solo si el movimiento está permitido
-        double accelerationX = allowXZ ? (k * deltaX - d * this.velocityX) : 0.0;
-        double accelerationZ = allowXZ ? (k * deltaZ - d * this.velocityZ) : 0.0;
-        double accelerationY = k * deltaY - d * this.velocityY; // Movimiento vertical siempre permitido
-
-        // Actualizar velocidades
-        if (allowXZ) {
-            this.velocityX += accelerationX * dt;
-            this.velocityX = Mth.clamp(this.velocityX, -0.15, 0.15);
-            this.velocityZ += accelerationZ * dt;
-            this.velocityZ = Mth.clamp(this.velocityZ, -0.15, 0.15);
-        } else {
-            this.velocityX = 0.0;
-            this.velocityZ = 0.0;
         }
-
-        this.velocityY += accelerationY * dt;
-        this.velocityY = Mth.clamp(this.velocityY, -0.15, 0.15);
-
-        // Calcular movimiento por eje
-        double moveX = this.velocityX;
-        double moveY = this.velocityY;
-        double moveZ = this.velocityZ;
-
-        // Establecer la nueva velocidad
-        this.setDeltaMovement(moveX, moveY, moveZ);
-
-        // Mover la entidad
-        this.move(MoverType.SELF, this.getDeltaMovement());
     }
 
+    private void followPath() {
+        if (currentPath.isEmpty() || currentPathIndex >= currentPath.size()) return;
 
-    /**
-     * Raycast vertical hacia abajo para encontrar el primer bloque sólido.
-     * Retorna la posición exacta de impacto (Y). Si no impacta, retorna minBuildHeight().
-     */
-    private double findFloorWithRaycast(double x, double y, double z) {
-        double rayLength = 10.0; // cuánto se extiende el rayo
-        Vec3 from = new Vec3(x, y, z);
-        Vec3 to   = new Vec3(x, y - rayLength, z);
+        BlockPos nextPos = getFarthestReachable();
+        if (nextPos != null) {
+            Vec3 target = new Vec3(
+                    nextPos.getX() + 0.5,
+                    nextPos.getY() + 0.4,
+                    nextPos.getZ() + 0.5
+            );
 
-        ClipContext ctx = new ClipContext(
-                from,
-                to,
+            moveToPos(target, true, true);
+
+            if (this.position().distanceToSqr(target) < 1.5) {
+                currentPathIndex = Math.min(currentPathIndex + 1, currentPath.size() - 1);
+            }
+        }
+    }
+
+    private BlockPos getFarthestReachable() {
+        for (int i = currentPath.size() - 1; i >= currentPathIndex; i--) {
+            BlockPos candidate = currentPath.get(i);
+            if (isDirectPathClear(this.blockPosition(), candidate)) {
+                currentPathIndex = i;
+                return candidate;
+            }
+        }
+        return currentPath.get(currentPathIndex);
+    }
+
+    private boolean isDirectPathClear(BlockPos start, BlockPos end) {
+        ClipContext context = new ClipContext(
+                new Vec3(start.getX() + 0.5, start.getY() + 0.5, start.getZ() + 0.5),
+                new Vec3(end.getX() + 0.5, end.getY() + 0.5, end.getZ() + 0.5),
                 ClipContext.Block.COLLIDER,
                 ClipContext.Fluid.NONE,
                 this
         );
 
-        BlockHitResult result = this.level().clip(ctx);
-        if (result.getType() == HitResult.Type.BLOCK) {
-            return result.getLocation().y;
-        }
-        return this.level().getMinBuildHeight();
+        return level().clip(context).getType() == HitResult.Type.MISS;
     }
 
-    /**
-     * Raycast vertical hacia arriba para encontrar el primer bloque sólido.
-     * Retorna la posición exacta de impacto (Y). Si no impacta, retorna maxBuildHeight().
-     */
-    private double findCeilingWithRaycast(double x, double y, double z) {
-        double rayLength = 10.0;
-        Vec3 from = new Vec3(x, y, z);
-        Vec3 to   = new Vec3(x, y + rayLength, z);
-
-        ClipContext ctx = new ClipContext(
-                from,
-                to,
-                ClipContext.Block.COLLIDER,
-                ClipContext.Fluid.NONE,
-                this
-        );
-
-        BlockHitResult result = this.level().clip(ctx);
-        if (result.getType() == HitResult.Type.BLOCK) {
-            return result.getLocation().y;
-        }
-        return this.level().getMaxBuildHeight();
-    }
+    /// Lógica de interacción ////////////////////////////////////////
 
     /**
      * Makes the drone interactable
-     * @return true
      */
     @Override
     public boolean isPickable(){
@@ -246,61 +445,125 @@ public class DroneEntity extends Entity {
      * Reemplaza la lógica de interacción para abrir el menú del dron.
      *
      * @param player El jugador que interactúa
-     * @param vec La posición de interacción
      * @param hand La mano usada para interactuar
      * @return El resultado de la interacción
      */
     @Override
-    public @NotNull InteractionResult interactAt(@NotNull Player player, @NotNull Vec3 vec, @NotNull InteractionHand hand) {
-        ItemStack itemstack = player.getItemInHand(hand);
-        InteractionResult retval = InteractionResult.sidedSuccess(this.level().isClientSide());
-        if (player instanceof ServerPlayer serverPlayer) {
-            serverPlayer.openMenu(new MenuProvider() {
-                @Override
-                public @NotNull Component getDisplayName() {
-                    return Component.literal("Assistance Drone");
-                }
-
-                @Override
-                public AbstractContainerMenu createMenu(int id, @NotNull Inventory inventory, @NotNull Player player) {
-                    FriendlyByteBuf packetBuffer = new FriendlyByteBuf(Unpooled.buffer());
-                    packetBuffer.writeBlockPos(player.blockPosition());
-                    packetBuffer.writeByte(0);
-                    packetBuffer.writeVarInt(DroneEntity.this.getId());
-                    return new DroneMenu(id, inventory, packetBuffer);
-                }
-            }, buf -> {
-                buf.writeBlockPos(player.blockPosition());
-                buf.writeByte(0);
-                buf.writeVarInt(this.getId());
-            });
+    public @NotNull InteractionResult interact(@NotNull Player player, @NotNull InteractionHand hand) {
+        if(!this.level().isClientSide()){
+            if (player instanceof ServerPlayer serverPlayer) {
+                serverPlayer.openMenu(this, buf -> {
+                    buf.writeVarInt(this.getId());
+                });
+            }
         }
-        super.interactAt(player, vec, hand);
-        return retval;
+        return InteractionResult.sidedSuccess(this.level().isClientSide());
     }
 
-    // See the Data and Networking article for information about these methods.
-    private final ItemStackHandler inventory = new ItemStackHandler(0) {
-        @Override
-        public int getSlotLimit(int slot) {
-            return 64;
+
+    /// Container ////////////////////////////////////////
+
+    @Override
+    public @Nullable ResourceKey<LootTable> getLootTable() {
+        return null;
+    }
+
+    @Override
+    public void setLootTable(@Nullable ResourceKey<LootTable> pLootTable) {
+    }
+
+    @Override
+    public long getLootTableSeed() {
+        return 0;
+    }
+
+    @Override
+    public void setLootTableSeed(long pLootTableSeed) {
+    }
+
+    @Override
+    public NonNullList<ItemStack> getItemStacks() {
+        return this.itemStacks;
+    }
+
+    @Override
+    public void clearItemStacks() {
+        this.itemStacks = NonNullList.withSize(this.getContainerSize(), ItemStack.EMPTY);
+    }
+
+    @Override
+    public int getContainerSize() {
+        return 12;
+    }
+
+    @Override
+    public int getMaxStackSize() {
+        return 8;
+    }
+
+    @Override
+    public ItemStack getItem(int pSlot) {
+        return this.getItemStacks().get(pSlot);
+    }
+
+    /**
+     * Removes up to a specified number of items from an inventory slot and returns them in a new stack.
+     */
+    @Override
+    public ItemStack removeItem(int pSlot, int pAmount) {
+        return ContainerHelper.removeItem(this.getItemStacks(), pSlot, pAmount);
+    }
+
+    /**
+     * Removes a stack from the given slot and returns it.
+     */
+    @Override
+    public ItemStack removeItemNoUpdate(int pSlot) {
+        ItemStack itemstack = this.getItemStacks().get(pSlot);
+        if (itemstack.isEmpty()) {
+            return ItemStack.EMPTY;
+        } else {
+            this.getItemStacks().set(pSlot, ItemStack.EMPTY);
+            return itemstack;
         }
-    };
+    }
 
+    /**
+     * Sets the given item stack to the specified slot in the inventory (can be crafting or armor sections).
+     */
     @Override
-    public void addAdditionalSaveData(@NotNull CompoundTag compound) {
-        compound.put("InventoryCustom", inventory.serializeNBT(this.registryAccess()));
+    public void setItem(int pSlot, ItemStack pStack) {
+        this.getItemStacks().set(pSlot, pStack);
+        pStack.limitSize(this.getMaxStackSize(pStack));
     }
 
     @Override
-    public void readAdditionalSaveData(@NotNull CompoundTag compound) {
-        if (compound.get("InventoryCustom") instanceof CompoundTag inventoryTag)
-            inventory.deserializeNBT(this.registryAccess(), inventoryTag);
+    public void setChanged() {
     }
 
-    // Data Synched
     @Override
-    protected void defineSynchedData(SynchedEntityData.@NotNull Builder builder) {
-        // Aquí puedes definir datos sincronizados si lo necesitas
+    public boolean stillValid(@NotNull Player pPlayer) {
+        return this.isAlive() && pPlayer.distanceToSqr(this) <= 16.0;
     }
+
+    @Override
+    public void clearContent() {
+        this.getItemStacks().clear();
+    }
+
+
+    /// Menu Provider ////////////////////////////////////////
+
+    @Override
+    public @NotNull Component getDisplayName() {
+        return Component.literal("Assistance Drone");
+    }
+
+    @Override
+    public @Nullable AbstractContainerMenu createMenu(int pContainerId, @NotNull Inventory pPlayerInventory, @NotNull Player pPlayer) {
+        FriendlyByteBuf packetBuffer = new FriendlyByteBuf(Unpooled.buffer());
+        packetBuffer.writeVarInt(this.getId());
+        return new DroneMenu(pContainerId, pPlayerInventory, packetBuffer);
+    }
+
 }

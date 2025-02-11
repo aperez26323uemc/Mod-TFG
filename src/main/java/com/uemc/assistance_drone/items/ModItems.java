@@ -3,6 +3,7 @@ package com.uemc.assistance_drone.items;
 import com.uemc.assistance_drone.AssistanceDrone;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -23,6 +24,10 @@ public class ModItems {
     /* Creates a new food item with the id "assistance_drone:example_id", nutrition 1 and saturation 2
     public static final DeferredItem<Item> EXAMPLE_ITEM = ITEMS.registerSimpleItem("example_item", new Item.Properties().food(new FoodProperties.Builder()
             .alwaysEdible().nutrition(1).saturationModifier(2f).build()));*/
+
+    public static final DeferredItem<Item> DRONE_ITEM = ITEMS.registerItem(
+            DroneItem.ID,
+            DroneItem::new);
 
     // Creates a creative tab with the id "assistance_drone:example_tab" for the example item, that is placed after the combat tab
     public static final DeferredHolder<net.minecraft.world.item.CreativeModeTab, net.minecraft.world.item.CreativeModeTab> CREATIVE_MODE_TAB =

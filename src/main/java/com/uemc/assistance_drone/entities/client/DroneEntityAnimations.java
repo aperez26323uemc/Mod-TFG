@@ -4,7 +4,10 @@ import net.minecraft.client.animation.AnimationChannel;
 import net.minecraft.client.animation.AnimationDefinition;
 import net.minecraft.client.animation.Keyframe;
 import net.minecraft.client.animation.KeyframeAnimations;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
+@OnlyIn(Dist.CLIENT)
 public class DroneEntityAnimations {
         public static final AnimationDefinition DRONE_MOTOR_LOOP = AnimationDefinition.Builder.withLength(0.2083F).looping()
                 .addAnimation("BackBlade", new AnimationChannel(AnimationChannel.Targets.ROTATION,

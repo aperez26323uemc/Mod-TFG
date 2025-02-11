@@ -11,9 +11,13 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import org.jetbrains.annotations.NotNull;
 
+@OnlyIn(Dist.CLIENT)
 public class DroneEntityRenderer extends EntityRenderer<DroneEntity> {
-    private static final ResourceLocation DRONE_TEXTURE = ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "textures/entity/drone/drone.png");
+    private static final ResourceLocation DRONE_TEXTURE = ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "textures/entity/drone.png");
     private final DroneEntityModel<DroneEntity> model;
 
     public DroneEntityRenderer(EntityRendererProvider.Context context) {
@@ -23,9 +27,9 @@ public class DroneEntityRenderer extends EntityRenderer<DroneEntity> {
     }
 
     @Override
-    public void render(DroneEntity entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+    public void render(@NotNull DroneEntity entity, float entityYaw, float partialTicks, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
         poseStack.pushPose();
-        poseStack.mulPose(Axis.YP.rotationDegrees(90.0F));
+        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - entityYaw));
         this.model.setupAnim(entity, 0, 0, partialTicks, entity.getYRot(), entity.getXRot());
 
         // Prepara el VertexConsumer y dibuja
@@ -37,7 +41,7 @@ public class DroneEntityRenderer extends EntityRenderer<DroneEntity> {
     }
 
     @Override
-    public ResourceLocation getTextureLocation(DroneEntity entity) {
+    public @NotNull ResourceLocation getTextureLocation(@NotNull DroneEntity entity) {
         return DRONE_TEXTURE;
     }
 }
