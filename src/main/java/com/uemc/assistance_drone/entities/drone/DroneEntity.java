@@ -207,7 +207,7 @@ public class DroneEntity extends Entity implements ContainerEntity {
 
     @OnlyIn(Dist.CLIENT)
     private void interpolatePosRot() {
-        // Only run interpolation on the client side
+        // Only run interpolation on the events side
         if (this.level().isClientSide && lerpSteps > 0) {
             // Calculate the fraction for this tick.
             double fraction = 1.0 / (double) lerpSteps;

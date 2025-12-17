@@ -1,4 +1,4 @@
-package com.uemc.assistance_drone.server;
+package com.uemc.assistance_drone.events;
 
 import com.mojang.logging.LogUtils;
 import com.uemc.assistance_drone.AssistanceDrone;
@@ -9,7 +9,7 @@ import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import org.slf4j.Logger;
 
 @EventBusSubscriber(modid = AssistanceDrone.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.DEDICATED_SERVER)
-public class ServerSetup {
+public class ServerEvents {
 
     private static final Logger LOGGER = LogUtils.getLogger();
 

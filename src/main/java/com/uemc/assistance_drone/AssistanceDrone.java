@@ -36,6 +36,8 @@ public class AssistanceDrone
         ModBlocks.BLOCKS.register(modEventBus);
         // Register the Deferred Register to the mod event bus so items get registered
         ModItems.ITEMS.register(modEventBus);
+        // Register the Deferred Register to the mod event bus so data components get registered
+        ModItems.DATA_COMPONENTS.register(modEventBus);
         // Register the Deferred Register to the mod event bus so tabs get registered
         ModItems.CREATIVE_MODE_TABS.register(modEventBus);
         // Register the Deferred Register to the mod event bus so entities get registered
