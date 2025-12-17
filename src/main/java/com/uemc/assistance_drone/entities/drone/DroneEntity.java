@@ -169,7 +169,7 @@ public class DroneEntity extends Entity implements ContainerEntity {
         if(this.getState().equals("IDLE")) {
             if(!level().isClientSide()) {
                 updateTarget();
-                moveToPos(targetPosition, false, true);
+                moveToPos(targetPosition, false);
                 lookAtPos(targetPosition);
             }
         }
@@ -252,18 +252,10 @@ public class DroneEntity extends Entity implements ContainerEntity {
         this.setYRot(newYaw);
     }
 
-    private void moveToPos(Vec3 targetPos, boolean allowXZ, boolean allowBounce) {
-        Vec3 newVelocity = calculateVelocity(targetPos, allowXZ, allowBounce);
+    private void moveToPos(Vec3 targetPos, boolean allowXZ) {
+        Vec3 newVelocity = calculateBounceVelocity(targetPos, allowXZ);
         setDeltaMovement(newVelocity);
         move(MoverType.SELF, getDeltaMovement());
-    }
-
-    private Vec3 calculateVelocity(Vec3 targetPos, boolean allowXZ, boolean allowBounce) {
-        if (allowBounce) {}
-            return calculateBounceVelocity(targetPos, allowXZ);
-        /*} else {
-            return calculateSmoothVelocity(targetPos, allowXZ);
-        }*/
     }
 
     private Vec3 calculateBounceVelocity(Vec3 targetPos, boolean allowXZ) {
@@ -400,7 +392,7 @@ public class DroneEntity extends Entity implements ContainerEntity {
                     nextPos.getZ() + 0.5
             );
 
-            moveToPos(target, true, true);
+            moveToPos(target, true);
 
             if (this.position().distanceToSqr(target) < 1.5) {
                 currentPathIndex = Math.min(currentPathIndex + 1, currentPath.size() - 1);
