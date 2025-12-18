@@ -1,90 +1,103 @@
 package com.uemc.assistance_drone.menus.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.uemc.assistance_drone.entities.drone.DroneState;
-import com.uemc.assistance_drone.entities.drone.DroneStateList;
+import com.uemc.assistance_drone.entities.drone.DroneGoalRegistry;
+import com.uemc.assistance_drone.entities.drone.goals.IStateGoal;
 import com.uemc.assistance_drone.menus.DroneMenu;
-import com.uemc.assistance_drone.network.DroneStateMessage;
+import com.uemc.assistance_drone.networking.DroneStateMessage;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @OnlyIn(Dist.CLIENT)
-public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu>{
+public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu> {
     private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("assistance_drone", "textures/screens/drone_screen.png");
     private static final ResourceLocation SCROLLER_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/scroller");
     private static final ResourceLocation SCROLLER_DISABLED_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/scroller_disabled");
-    private final DroneStateList states;
-    // Array fijo de 7 botones para mostrar los estados visibles
+
+    // Lista dinámica de objetivos/estados obtenidos del registro
+    private final List<IStateGoal> displayableStates = new ArrayList<>();
+
+    // Array fijo de botones para mostrar los estados visibles (máximo 7)
     private final int maxStatesCount;
     private final DroneStateButton[] stateButtons;
+
     private int scrollOff;
     private boolean isDragging;
 
-    public DroneMenuScreen(DroneMenu droneMenu, net.minecraft.world.entity.player.Inventory inventory, Component title) {
+    public DroneMenuScreen(DroneMenu droneMenu, Inventory inventory, Component title) {
         super(droneMenu, inventory, title);
         this.imageWidth = 245;
-        states = DroneStateList.getAllowedStates();
-        maxStatesCount = Math.min(7, states.size());
-        stateButtons = new DroneStateButton[maxStatesCount];
+
+        // 1. Rellenar la lista usando las factorías del registro
+        DroneGoalRegistry.getEntries().forEach((id, factory) -> {
+            // Instanciamos el goal temporalmente para leer sus datos (ID, Etiqueta)
+            Goal g = factory.apply(this.menu.getDrone());
+            if (g instanceof IStateGoal stateGoal) {
+                displayableStates.add(stateGoal);
+            }
+        });
+
+        // 2. Calcular cuántos botones caben o hay disponibles (máx 7)
+        // NOTA: Si hay 0 estados, evitamos crash con Math.min
+        this.maxStatesCount = Math.min(7, Math.max(1, displayableStates.size()));
+        this.stateButtons = new DroneStateButton[maxStatesCount];
     }
 
-    /**
-     * Renderiza el fondo del menú.
-     *
-     * @param guiGraphics Objeto para manejar gráficos GUI.
-     * @param partialTicks Tiempo parcial entre ticks.
-     * @param gx           Posición X del mouse.
-     * @param gy           Posición Y del mouse.
-     */
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTicks, int gx, int gy) {
         RenderSystem.setShaderTexture(0, TEXTURE);
         guiGraphics.blit(TEXTURE, this.leftPos, this.topPos, 0, 0, this.imageWidth, this.imageHeight);
     }
 
-    /**
-     * Renderiza los elementos del menú, incluyendo el fondo, iconos y tooltips.
-     *
-     * @param guiGraphics Objeto para manejar gráficos GUI.
-     * @param mouseX      Posición X del mouse.
-     * @param mouseY      Posición Y del mouse.
-     * @param partialTicks Tiempo parcial entre ticks.
-     */
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTicks); // Renderiza el fondo oscuro cuando el menú está abierto
-        super.render(guiGraphics, mouseX, mouseY, partialTicks); // Llama al renderizado de la clase padre
+        this.renderBackground(guiGraphics, mouseX, mouseY, partialTicks);
+
+        // Obtenemos el ID del estado actual del dron (string)
+        String currentStateId = this.menu.getDrone().getState();
+
+        // Actualizamos estado activo/inactivo de los botones visibles
+        for (DroneStateButton button : this.stateButtons) {
+            if (button != null) {
+                // El botón está activo si NO es el estado actual
+                button.active = !button.visible || !button.getStateId().equals(currentStateId);
+            }
+        }
+
+        super.render(guiGraphics, mouseX, mouseY, partialTicks);
 
         int i = (this.width - this.imageWidth) / 2;
         int j = (this.height - this.imageHeight) / 2;
         this.renderScroller(guiGraphics, i, j);
 
-        // Aquí actualizamos cada botón con el estado correspondiente según scrollOff.
-        // Por ejemplo, el botón 0 mostrará el estado en states.get(0 + scrollOff),
-        // el botón 1 mostrará states.get(1 + scrollOff), etc.
+        // Actualizamos el contenido de los botones según el scroll
         for (int index = 0; index < stateButtons.length; index++) {
             int listIndex = index + scrollOff;
-            if (listIndex < states.size()) {
-                DroneState state = states.get(listIndex);
-                stateButtons[index].setState(state);
+            if (listIndex < displayableStates.size() && stateButtons[index] != null) {
+                IStateGoal state = displayableStates.get(listIndex);
+                stateButtons[index].setState(state); // Pasamos el IStateGoal
                 stateButtons[index].visible = true;
-            } else {
+            } else if (stateButtons[index] != null) {
                 stateButtons[index].visible = false;
             }
         }
 
-        this.renderTooltip(guiGraphics, mouseX, mouseY); // Renderiza cualquier tooltip si es necesario
+        this.renderTooltip(guiGraphics, mouseX, mouseY);
     }
 
     private void renderScroller(GuiGraphics pGuiGraphics, int pPosX, int pPosY) {
-        int i = states.size() + 1 - 7;
+        int i = displayableStates.size() + 1 - 7;
         if (i > 1) {
             int j = 139 - (27 + (i - 1) * 139 / i);
             int k = 1 + j / i + 139 / i;
@@ -92,41 +105,29 @@ public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu>{
             if (this.scrollOff == i - 1) {
                 i1 = 113;
             }
-
             pGuiGraphics.blitSprite(SCROLLER_SPRITE, pPosX + 63, pPosY + 18 + i1, 0, 6, 27);
         } else {
             pGuiGraphics.blitSprite(SCROLLER_DISABLED_SPRITE, pPosX + 63, pPosY + 18, 0, 6, 27);
         }
     }
+
     private boolean canScroll(int pNumOffers) {
         return pNumOffers > 7;
     }
 
     @Override
     public boolean mouseScrolled(double pMouseX, double pMouseY, double pScrollX, double pScrollY) {
-        int i = states.size();
+        int i = displayableStates.size();
         if (this.canScroll(i)) {
             int j = i - 7;
             this.scrollOff = Mth.clamp((int)((double)this.scrollOff - pScrollY), 0, j);
         }
-
         return true;
     }
 
-    /**
-     * Called when the mouse is dragged within the GUI element.
-     * <p>
-     * @return {@code true} if the event is consumed, {@code false} otherwise.
-     *
-     * @param pMouseX the X coordinate of the mouse.
-     * @param pMouseY the Y coordinate of the mouse.
-     * @param pButton the button that is being dragged.
-     * @param pDragX  the X distance of the drag.
-     * @param pDragY  the Y distance of the drag.
-     */
     @Override
     public boolean mouseDragged(double pMouseX, double pMouseY, int pButton, double pDragX, double pDragY) {
-        int i = states.size();
+        int i = displayableStates.size();
         if (this.isDragging) {
             int j = this.topPos + 18;
             int k = j + 139;
@@ -140,71 +141,57 @@ public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu>{
         }
     }
 
-    /**
-     * Called when a mouse button is clicked within the GUI element.
-     * <p>
-     * @return {@code true} if the event is consumed, {@code false} otherwise.
-     *
-     * @param pMouseX the X coordinate of the mouse.
-     * @param pMouseY the Y coordinate of the mouse.
-     * @param pButton the button that was clicked.
-     */
     @Override
     public boolean mouseClicked(double pMouseX, double pMouseY, int pButton) {
         this.isDragging = false;
         int i = (this.width - this.imageWidth) / 2;
         int j = (this.height - this.imageHeight) / 2;
-        if (this.canScroll(states.size())
+        if (this.canScroll(displayableStates.size())
                 && pMouseX > (double)(i + 63)
                 && pMouseX < (double)(i + 63 + 6)
                 && pMouseY > (double)(j + 18)
                 && pMouseY <= (double)(j + 18 + 139 + 1)) {
             this.isDragging = true;
         }
-
         return super.mouseClicked(pMouseX, pMouseY, pButton);
     }
 
-
-    /**
-     * Renderiza las etiquetas del menú (título y nombre del inventario del jugador).
-     *
-     * @param guiGraphics Objeto para manejar gráficos GUI.
-     * @param mouseX      Posición X del mouse.
-     * @param mouseY      Posición Y del mouse.
-     */
     @Override
     protected void renderLabels(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        // Puedes personalizar las etiquetas aquí. Por ahora, dejaremos vacío.
+        // Etiquetas personalizadas si son necesarias
     }
 
-    /**
-     * Inicializa los elementos interactivos del menú.
-     */
     @Override
     public void init() {
         super.init();
 
-            int x = this.leftPos + 5;
-            int startY = this.topPos + 18;
+        net.minecraft.client.gui.layouts.GridLayout layout = new net.minecraft.client.gui.layouts.GridLayout();
 
+        // Generación de botones
         for (int i = 0; i < maxStatesCount; i++) {
-            int y = startY + i * DroneStateButton.BUTTON_HEIGHT;
-            // Se asigna un estado inicial si existe; si no, se asigna null.
-            DroneState initialState = (i < states.size()) ? states.get(i) : null;
-            DroneStateButton button = new DroneStateButton(x, y, initialState, btn -> {
-                // Acción al pulsar el botón: podrías actualizar el estado actual del dron.
+            // Obtenemos el estado inicial si existe
+            IStateGoal initialState = (i < displayableStates.size()) ? displayableStates.get(i) : null;
 
-                String state = ((DroneStateButton)btn).getState();
-
-                // Enviamos un mensaje al servidor para que cambie el estado
-                int droneId = menu.getDrone().getId(); // ID de la entidad en el cliente
-                PacketDistributor.sendToServer(new DroneStateMessage(droneId, state));
-                System.out.println("Estado seleccionado: " + menu.getDrone().getState());
+            // Creamos el botón. IMPORTANTE: DroneStateButton debe actualizarse para aceptar IStateGoal
+            stateButtons[i] = new DroneStateButton(0, 0, initialState, btn -> {
+                DroneStateButton dBtn = (DroneStateButton)btn;
+                if (dBtn.getStateId() != null && !dBtn.getStateId().isEmpty()) {
+                    updateDroneState(dBtn.getStateId());
+                }
             });
-            stateButtons[i] = button;
-            this.addRenderableWidget(button);
+
+            layout.addChild(stateButtons[i], i, 0);
         }
+
+        layout.arrangeElements();
+        layout.setPosition(this.leftPos + 5, this.topPos + 18);
+        layout.visitWidgets(this::addRenderableWidget);
     }
 
+    private void updateDroneState(String stateId) {
+        int droneId = menu.getDrone().getId();
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                new DroneStateMessage(droneId, stateId)
+        );
+    }
 }

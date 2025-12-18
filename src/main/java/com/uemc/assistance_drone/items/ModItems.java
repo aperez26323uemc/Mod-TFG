@@ -38,7 +38,7 @@ public class ModItems {
             builder -> builder
                     // The codec to read/write the data to disk
                     .persistent(BlockPos.CODEC)
-                    // The codec to read/write the data across the network
+                    // The codec to read/write the data across the networking
                     .networkSynchronized(BlockPos.STREAM_CODEC)
     );
 
@@ -47,7 +47,7 @@ public class ModItems {
             builder -> builder
                     // The codec to read/write the data to disk
                     .persistent(BlockPos.CODEC)
-                    // The codec to read/write the data across the network
+                    // The codec to read/write the data across the networking
                     .networkSynchronized(BlockPos.STREAM_CODEC)
     );
 }

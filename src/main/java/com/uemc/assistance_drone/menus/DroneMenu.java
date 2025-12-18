@@ -7,8 +7,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.items.SlotItemHandler; // IMPORTANTE
 import org.jetbrains.annotations.NotNull;
-
 
 public class DroneMenu extends AbstractContainerMenu {
     public final static String ID = "drone_menu";
@@ -19,37 +19,28 @@ public class DroneMenu extends AbstractContainerMenu {
     public DroneMenu(int id, Inventory playerInventory, FriendlyByteBuf packetBuffer) {
         super(ModMenus.DRONE_MENU.get(), id);
 
-        // Obtener el inventario del dron a partir del ID de la entidad
         int droneId = packetBuffer.readVarInt();
         this.drone = (DroneEntity) playerInventory.player.level().getEntity(droneId);
 
-        if (drone == null) {
-            return;
-        }
+        if (drone == null) return;
 
-        // Añadir los slots del dron
         for (int row = 0; row < ROWS; ++row) {
             for (int col = 0; col < COLUMNS; ++col) {
-                this.addSlot(new Slot(this.drone, col + row * COLUMNS, 167 + col * 18, 18 + row * 18));
+                this.addSlot(new SlotItemHandler(this.drone.getInventory(), col + row * COLUMNS, 167 + col * 18, 18 + row * 18));
             }
         }
 
-        // Añadir las ranuras del inventario del jugador
-        // Inventario superior
+        // Inventario del Jugador (Sigue siendo Slot normal)
         for (int row = 0; row < 3; ++row) {
             for (int col = 0; col < 9; ++col) {
                 this.addSlot(new Slot(playerInventory, col + row * 9 + 9, 77 + col * 18, 84 + row * 18));
             }
         }
-        // Inventario inferior (hotbar)
         for (int col = 0; col < 9; ++col) {
             this.addSlot(new Slot(playerInventory, col, 77 + col * 18, 142));
         }
     }
 
-    /**
-     * Handle when the stack in slot {@code pIndex} is shift-clicked. Normally this moves the stack between the player inventory and the other inventory(s).
-     */
     @Override
     public @NotNull ItemStack quickMoveStack(@NotNull Player pPlayer, int pIndex) {
         ItemStack itemstack = ItemStack.EMPTY;
@@ -58,11 +49,9 @@ public class DroneMenu extends AbstractContainerMenu {
             ItemStack itemstack1 = slot.getItem();
             itemstack = itemstack1.copy();
             if (pIndex < ROWS*COLUMNS) {
-                // Del dron al inventario
                 if (!this.moveItemStackTo(itemstack1, ROWS*COLUMNS, this.slots.size(), false)) {
                     return ItemStack.EMPTY;
                 }
-                // Del inventario al dron
             } else if (!this.moveItemStackTo(itemstack1, 0, ROWS*COLUMNS, false)) {
                 return ItemStack.EMPTY;
             }
@@ -73,20 +62,15 @@ public class DroneMenu extends AbstractContainerMenu {
                 slot.setChanged();
             }
         }
-
         return itemstack;
     }
 
-    /**
-     * Verifica si el menú sigue siendo válido para el jugador.
-     */
     @Override
     public boolean stillValid(@NotNull Player player) {
-        return this.drone.stillValid(player);
+        return this.drone.isAlive() && player.distanceToSqr(this.drone) <= 64.0;
     }
 
     public DroneEntity getDrone() {
         return this.drone;
     }
-
 }

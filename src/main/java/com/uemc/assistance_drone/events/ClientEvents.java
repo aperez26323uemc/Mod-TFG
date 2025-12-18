@@ -2,6 +2,8 @@ package com.uemc.assistance_drone.events;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.uemc.assistance_drone.AssistanceDrone;
+import com.uemc.assistance_drone.entities.client.DroneFlyingSound;
+import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import com.uemc.assistance_drone.items.BluePrint;
 import com.uemc.assistance_drone.items.ModItems;
 import net.minecraft.client.Minecraft;
@@ -9,6 +11,8 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
@@ -17,8 +21,14 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.client.model.data.ModelData;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
@@ -51,6 +61,17 @@ public class ClientEvents {
         }
     }
 
+    @SubscribeEvent
+    public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
+        if (
+                event.getEntity() instanceof DroneEntity drone
+                        && event.getLevel().isClientSide()
+        ) {
+            Minecraft.getInstance().getSoundManager().play(new DroneFlyingSound(drone));
+        }
+    }
+
+    /// private region
     private static void renderBlockMarker(PoseStack poseStack, BlockPos pos, BlockState blockState) {
         Minecraft mc = Minecraft.getInstance();
         MultiBufferSource.BufferSource bufferSource = mc.renderBuffers().bufferSource();
