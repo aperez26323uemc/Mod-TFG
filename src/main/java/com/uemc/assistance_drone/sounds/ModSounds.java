@@ -1,6 +1,7 @@
 package com.uemc.assistance_drone.sounds;
 
 import com.uemc.assistance_drone.AssistanceDrone;
+import com.uemc.assistance_drone.util.ModKeys;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
@@ -12,8 +13,8 @@ public class ModSounds {
             DeferredRegister.create(Registries.SOUND_EVENT, AssistanceDrone.MODID);
 
     public static final DeferredHolder<SoundEvent, SoundEvent> DRONE_FLYING =
-            SOUNDS.register("drone_flying",
+            SOUNDS.register(ModKeys.DRONE_FLYING_SOUND_KEY,
                     () -> SoundEvent.createVariableRangeEvent(
-                            ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "drone_flying")
+                            ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "sounds/drone_flying")
                     ));
 }

@@ -10,7 +10,7 @@ import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.items.wrapper.InvWrapper;
 
-@EventBusSubscriber(modid = AssistanceDrone.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = AssistanceDrone.MODID)
 public class ModCommonEvents {
 
     @SubscribeEvent

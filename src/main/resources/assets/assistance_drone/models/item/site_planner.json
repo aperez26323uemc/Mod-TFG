@@ -1,0 +1,42 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "assistance_drone:item/site_planner"
+  },
+  "display": {
+    "firstperson_righthand": {
+      "rotation": [
+        0,
+        -30,
+        0
+      ],
+      "translation": [
+        0,
+        3.25,
+        0
+      ],
+      "scale" : [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    "firstperson_lefthand": {
+      "rotation": [
+        0,
+        -30,
+        0
+      ],
+      "translation": [
+        0,
+        3.25,
+        0
+      ],
+      "scale" : [
+        0.5,
+        0.5,
+        0.5
+      ]
+    }
+  }
+}

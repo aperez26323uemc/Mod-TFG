@@ -8,7 +8,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import org.slf4j.Logger;
 
-@EventBusSubscriber(modid = AssistanceDrone.MODID, bus = EventBusSubscriber.Bus.GAME, value = Dist.DEDICATED_SERVER)
+@EventBusSubscriber(modid = AssistanceDrone.MODID, value = Dist.DEDICATED_SERVER)
 public class ServerEvents {
 
     private static final Logger LOGGER = LogUtils.getLogger();

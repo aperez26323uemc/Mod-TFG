@@ -2,6 +2,7 @@ package com.uemc.assistance_drone.networking;
 
 import com.uemc.assistance_drone.AssistanceDrone;
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
+import com.uemc.assistance_drone.util.ModKeys;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -15,7 +16,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record DroneStateMessage(int droneId, String state) implements CustomPacketPayload {
 
     // 2. Definimos el TIPO (Identificador único del paquete)
-    public static final Type<DroneStateMessage> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "drone_state"));
+    public static final Type<DroneStateMessage> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, ModKeys.STATE_NETWORK_MESSAGE_PATH));
 
     // 3. El StreamCodec (Sustituye a encode/decode manuales).
     // NeoForge serializa automáticamente el int (ID) y el String (Estado).

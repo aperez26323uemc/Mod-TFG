@@ -1,14 +1,14 @@
 package com.uemc.assistance_drone.entities.drone.goals;
 
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
-import com.uemc.assistance_drone.entities.drone.DroneStateIds;
+import com.uemc.assistance_drone.util.ModKeys;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
 
-public class DroneIdleGoal extends Goal implements IStateGoal {
+public class DroneIdleGoal extends Goal {
     private final DroneEntity drone;
 
     public DroneIdleGoal(DroneEntity drone) {
@@ -16,9 +16,8 @@ public class DroneIdleGoal extends Goal implements IStateGoal {
         this.setFlags(EnumSet.of(Flag.MOVE));
     }
 
-    @Override
     public String getStateId() {
-        return DroneStateIds.IDLE;
+        return ModKeys.STATE_IDLE;
     }
 
     @Override

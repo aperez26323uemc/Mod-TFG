@@ -32,11 +32,11 @@ public class ModRecipeProvider extends RecipeProvider implements IConditionBuild
                 .define('R', Items.REDSTONE)
                 .define('D', Items.DIAMOND_BLOCK)
                 .define('P', Items.PISTON)
-                //.unlockedBy("has_blueprint", has(ModItems.BluePrint.get()))
+                .unlockedBy("drone", has(Items.IRON_INGOT))
                 .save(output);
 
-        // RECETA DEL BLUEPRINT
-        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, ModItems.BluePrint.get())
+        // RECETA DE Planificador de Zona
+        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, ModItems.SITE_PLANNER.get())
                 .requires(Items.PAPER)
                 .requires(Items.BLUE_DYE)
                 .unlockedBy("has_paper", has(Items.PAPER))

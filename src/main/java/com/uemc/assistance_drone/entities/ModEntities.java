@@ -13,7 +13,7 @@ public class ModEntities {
             DeferredRegister.create(Registries.ENTITY_TYPE, AssistanceDrone.MODID);
 
     public static final Supplier<EntityType<DroneEntity>> DRONE_ENTITY_TYPE = ENTITY_TYPES.register(
-            DroneEntity.ID,
+            DroneEntity.NAME,
             DroneEntity.ENTITY_TYPE_SUPPLIER
     );
 }

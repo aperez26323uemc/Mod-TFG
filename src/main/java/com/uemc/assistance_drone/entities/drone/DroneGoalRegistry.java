@@ -1,42 +1,59 @@
 package com.uemc.assistance_drone.entities.drone;
 
-import com.uemc.assistance_drone.entities.drone.goals.DroneFollowGoal;
-import com.uemc.assistance_drone.entities.drone.goals.DroneIdleGoal;
-import com.uemc.assistance_drone.entities.drone.goals.IStateGoal;
+import com.uemc.assistance_drone.entities.drone.goals.*;
+import com.uemc.assistance_drone.util.ModKeys;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.ai.goal.Goal;
 
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
 
 public class DroneGoalRegistry {
-    // Mapea ID -> Constructor del Goal
-    // Usamos LinkedHashMap para mantener el orden de los botones en la UI
-    private static final Map<String, Function<DroneEntity, ? extends Goal>> GOALS = new LinkedHashMap<>();
+    // RECORD: Contenedor de datos inmutable. Define qué es un "Estado".
+    public record StateDefinition(
+            String id,
+            int priority, // Prioridad en la IA (menor número = mayor prioridad)
+            Function<DroneEntity, Goal> factory // Cómo fabricar el goal
+    ) {
+        // Helper para obtener la etiqueta de traducción estandarizada
+        public Component getLabel() {
+            return Component.translatable(ModKeys.getStateTitleKey(this.id));
+        }
 
-    // Registro estático inicial
+        public Component getTooltip() {
+            return Component.translatable(ModKeys.getStateDescKey(this.id));
+        }
+    }
+
+    // Mapa ordenado para mantener consistencia, aunque ordenaremos por prioridad al registrar
+    private static final Map<String, StateDefinition> REGISTRY = new LinkedHashMap<>();
+
+    public static void register(String id, int priority, Function<DroneEntity, Goal> factory) {
+        REGISTRY.put(id, new StateDefinition(id, priority, factory));
+    }
+
+    public static Collection<StateDefinition> getDefinitions() {
+        return REGISTRY.values();
+    }
+
+    public static StateDefinition get(String id) {
+        return REGISTRY.get(id);
+    }
+
     static {
-        register(DroneStateIds.IDLE, DroneIdleGoal::new);
-        register(DroneStateIds.FOLLOW, DroneFollowGoal::new);
-    }
+        // IDLE: Prioridad 4 (Baja/Default)
+        register(ModKeys.STATE_IDLE, 4, DroneIdleGoal::new);
 
-    /**
-     * Registra un nuevo estado/goal.
-     * ¡Ideal para llamar desde un Mixin o desde otro mod!
-     */
-    public static void register(String id, Function<DroneEntity, ? extends Goal> factory) {
-        GOALS.put(id, factory);
-    }
+        // FOLLOW: Prioridad 3 (Media)
+        register(ModKeys.STATE_FOLLOW, 3, DroneFollowGoal::new);
 
-    public static Collection<Function<DroneEntity, ? extends Goal>> getFactories() {
-        return GOALS.values();
-    }
+        // MINE: Prioridad 2 (Alta)
+        register(ModKeys.STATE_MINE, 2, drone ->
+                new DroneMineGoal(drone, s -> s.equals(ModKeys.STATE_MINE)));
 
-    // Helper para obtener una instancia "dummy" o real para sacar datos de UI
-    // Nota: Creamos una instancia temporal para leer el ID/Label si es necesario,
-    // o simplemente confiamos en que el ID del mapa coincide.
-    public static Map<String, Function<DroneEntity, ? extends Goal>> getEntries() {
-        return GOALS;
+        // PICKUP: Prioridad 1 (Muy Alta)
+        // Lógica: Se activa si estado es PICKUP o MINE
+        register(ModKeys.STATE_PICKUP, 1, drone ->
+                new DronePickupGoal(drone, s -> s.equals(ModKeys.STATE_PICKUP) || s.equals(ModKeys.STATE_MINE)));
     }
 }

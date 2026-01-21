@@ -1,16 +1,19 @@
 package com.uemc.assistance_drone.menus.client;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.uemc.assistance_drone.AssistanceDrone;
 import com.uemc.assistance_drone.entities.drone.DroneGoalRegistry;
-import com.uemc.assistance_drone.entities.drone.goals.IStateGoal;
+import com.uemc.assistance_drone.items.ModItems;
 import com.uemc.assistance_drone.menus.DroneMenu;
 import com.uemc.assistance_drone.networking.DroneStateMessage;
+import com.uemc.assistance_drone.util.ModKeys;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
@@ -21,37 +24,27 @@ import java.util.List;
 
 @OnlyIn(Dist.CLIENT)
 public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu> {
-    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath("assistance_drone", "textures/screens/drone_screen.png");
+    private static final ResourceLocation TEXTURE = ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "textures/screens/drone_screen.png");
     private static final ResourceLocation SCROLLER_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/scroller");
     private static final ResourceLocation SCROLLER_DISABLED_SPRITE = ResourceLocation.withDefaultNamespace("container/villager/scroller_disabled");
 
-    // Lista dinámica de objetivos/estados obtenidos del registro
-    private final List<IStateGoal> displayableStates = new ArrayList<>();
+    // MODELO: Lista de definiciones obtenida del registro
+    private final List<DroneGoalRegistry.StateDefinition> displayableStates = new ArrayList<>();
 
-    // Array fijo de botones para mostrar los estados visibles (máximo 7)
-    private final int maxStatesCount;
-    private final DroneStateButton[] stateButtons;
+    // VISTA: Array de botones "tontos" (Solo pintan lo que les digamos)
+    private final int maxStatesCount = 7; // Fijo a 7 para coincidir con la altura del scroll (139px)
+    private final DroneStateButton[] stateButtons = new DroneStateButton[maxStatesCount];
 
     private int scrollOff;
     private boolean isDragging;
 
     public DroneMenuScreen(DroneMenu droneMenu, Inventory inventory, Component title) {
         super(droneMenu, inventory, title);
-        this.imageWidth = 245;
+        this.imageWidth = 256;
+        this.imageHeight = 191;
 
-        // 1. Rellenar la lista usando las factorías del registro
-        DroneGoalRegistry.getEntries().forEach((id, factory) -> {
-            // Instanciamos el goal temporalmente para leer sus datos (ID, Etiqueta)
-            Goal g = factory.apply(this.menu.getDrone());
-            if (g instanceof IStateGoal stateGoal) {
-                displayableStates.add(stateGoal);
-            }
-        });
-
-        // 2. Calcular cuántos botones caben o hay disponibles (máx 7)
-        // NOTA: Si hay 0 estados, evitamos crash con Math.min
-        this.maxStatesCount = Math.min(7, Math.max(1, displayableStates.size()));
-        this.stateButtons = new DroneStateButton[maxStatesCount];
+        // 1. Cargar datos del modelo (Registry)
+        this.displayableStates.addAll(DroneGoalRegistry.getDefinitions());
     }
 
     @Override
@@ -64,32 +57,39 @@ public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu> {
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         this.renderBackground(guiGraphics, mouseX, mouseY, partialTicks);
 
-        // Obtenemos el ID del estado actual del dron (string)
-        String currentStateId = this.menu.getDrone().getState();
-
-        // Actualizamos estado activo/inactivo de los botones visibles
-        for (DroneStateButton button : this.stateButtons) {
-            if (button != null) {
-                // El botón está activo si NO es el estado actual
-                button.active = !button.visible || !button.getStateId().equals(currentStateId);
-            }
-        }
-
         super.render(guiGraphics, mouseX, mouseY, partialTicks);
 
+        // Render del Scroller
         int i = (this.width - this.imageWidth) / 2;
         int j = (this.height - this.imageHeight) / 2;
         this.renderScroller(guiGraphics, i, j);
 
-        // Actualizamos el contenido de los botones según el scroll
+        // CONTROLADOR: Actualizar contenido de los botones según el Scroll
         for (int index = 0; index < stateButtons.length; index++) {
             int listIndex = index + scrollOff;
-            if (listIndex < displayableStates.size() && stateButtons[index] != null) {
-                IStateGoal state = displayableStates.get(listIndex);
-                stateButtons[index].setState(state); // Pasamos el IStateGoal
-                stateButtons[index].visible = true;
-            } else if (stateButtons[index] != null) {
-                stateButtons[index].visible = false;
+            DroneStateButton btn = stateButtons[index];
+
+            if (listIndex < displayableStates.size() && btn != null) {
+                // Obtenemos la definición del modelo
+                DroneGoalRegistry.StateDefinition def = displayableStates.get(listIndex);
+
+                // Inyectamos datos en la vista (Update State)
+                btn.updateState(def.id(), def.getLabel(), def.getTooltip());
+                btn.visible = true;
+            } else if (btn != null) {
+                // Limpiamos el botón si no hay dato
+                btn.updateState(null, CommonComponents.EMPTY, CommonComponents.EMPTY);
+                btn.visible = false;
+            }
+        }
+
+        // CONTROLADOR: Sincronizar estado visual de los botones
+        String currentStateId = this.menu.getDrone().getState();
+
+        for (DroneStateButton button : this.stateButtons) {
+            if (button != null) {
+                // Activo si NO es el estado actual (para que no puedas clicar el que ya tienes)
+                button.active = !button.visible || !button.getStateId().equals(currentStateId);
             }
         }
 
@@ -105,9 +105,9 @@ public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu> {
             if (this.scrollOff == i - 1) {
                 i1 = 113;
             }
-            pGuiGraphics.blitSprite(SCROLLER_SPRITE, pPosX + 63, pPosY + 18 + i1, 0, 6, 27);
+            pGuiGraphics.blitSprite(SCROLLER_SPRITE, pPosX + 67, pPosY + 33 + i1, 0, 6, 27);
         } else {
-            pGuiGraphics.blitSprite(SCROLLER_DISABLED_SPRITE, pPosX + 63, pPosY + 18, 0, 6, 27);
+            pGuiGraphics.blitSprite(SCROLLER_DISABLED_SPRITE, pPosX + 67, pPosY + 33, 0, 6, 27);
         }
     }
 
@@ -158,33 +158,49 @@ public class DroneMenuScreen extends AbstractContainerScreen<DroneMenu> {
 
     @Override
     protected void renderLabels(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        // Etiquetas personalizadas si son necesarias
+        int textColor = 4210752;
+        Component modesLabel = Component.translatable(ModKeys.GUI_DRONE_MENU_MODES_LABEL);
+        // Asegúrate de importar ModItems correctamente
+        Component sitePlannerLabel = ModItems.SITE_PLANNER.get().getDescription();
+        Component storageLabel = Component.translatable(ModKeys.GUI_DRONE_MENU_STORAGE_LABEL);
+
+        guiGraphics.drawString(this.font, this.menu.getDrone().getDisplayName(), 8, 6, textColor, false);
+        guiGraphics.drawString(this.font, modesLabel, 10, 20, textColor, false);
+        guiGraphics.drawString(this.font, sitePlannerLabel, 88, 20, textColor, false);
+        guiGraphics.drawString(this.font, storageLabel, 178, 20, textColor, false);
+        guiGraphics.drawString(this.font, this.playerInventoryTitle, 88, 95, textColor, false);
     }
 
     @Override
     public void init() {
         super.init();
 
-        net.minecraft.client.gui.layouts.GridLayout layout = new net.minecraft.client.gui.layouts.GridLayout();
+        GridLayout layout = new GridLayout();
 
-        // Generación de botones
+        // Generación de botones (INYECCIÓN DE DEPENDENCIAS EN UI)
         for (int i = 0; i < maxStatesCount; i++) {
-            // Obtenemos el estado inicial si existe
-            IStateGoal initialState = (i < displayableStates.size()) ? displayableStates.get(i) : null;
+            // Datos iniciales (si existen)
+            DroneGoalRegistry.StateDefinition def = (i < displayableStates.size()) ? displayableStates.get(i) : null;
 
-            // Creamos el botón. IMPORTANTE: DroneStateButton debe actualizarse para aceptar IStateGoal
-            stateButtons[i] = new DroneStateButton(0, 0, initialState, btn -> {
+            String id = (def != null) ? def.id() : null;
+            Component label = (def != null) ? def.getLabel() : CommonComponents.EMPTY;
+            Component tooltip = (def != null) ? def.getTooltip() : CommonComponents.EMPTY;
+
+            // Creamos el botón con el constructor Senior (Sin IStateGoal)
+            stateButtons[i] = new DroneStateButton(0, 0, id, label, tooltip, btn -> {
                 DroneStateButton dBtn = (DroneStateButton)btn;
                 if (dBtn.getStateId() != null && !dBtn.getStateId().isEmpty()) {
                     updateDroneState(dBtn.getStateId());
                 }
             });
 
+            // Layout vertical (fila i, columna 0)
             layout.addChild(stateButtons[i], i, 0);
         }
 
         layout.arrangeElements();
-        layout.setPosition(this.leftPos + 5, this.topPos + 18);
+        // Coordenadas ajustadas según tu snippet
+        layout.setPosition(this.leftPos + 9, this.topPos + 33);
         layout.visitWidgets(this::addRenderableWidget);
     }
 

@@ -1,0 +1,8 @@
+{
+  "sources": [
+    {
+      "type": "single",
+      "resource": "assistance_drone:item/empty_slot_site_planner"
+    }
+  ]
+}

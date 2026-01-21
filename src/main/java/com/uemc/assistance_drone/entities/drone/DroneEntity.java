@@ -1,13 +1,11 @@
 package com.uemc.assistance_drone.entities.drone;
 
-import com.uemc.assistance_drone.entities.drone.goals.DroneFollowGoal;
-import com.uemc.assistance_drone.entities.drone.goals.DroneIdleGoal;
 import com.uemc.assistance_drone.menus.DroneMenu;
+import com.uemc.assistance_drone.util.ModKeys;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -39,7 +37,7 @@ import java.util.function.Supplier;
 
 public class DroneEntity extends PathfinderMob implements MenuProvider {
 
-    public static final String ID = "drone";
+    public static final String NAME = ModKeys.DRONE_ENTITY_KEY;
     private static final float DRONE_WIDTH = 0.7F;
     private static final float DRONE_HEIGHT = 0.6F;
     private static final EntityDataAccessor<String> STATE =
@@ -50,14 +48,14 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     public static Supplier<EntityType<DroneEntity>> ENTITY_TYPE_SUPPLIER =
             () -> EntityType.Builder.of(DroneEntity::new, MobCategory.MISC)
                     .sized(DRONE_WIDTH, DRONE_HEIGHT)
-                    .build(ID);
+                    .build(NAME);
 
     public final AnimationState bladeAnimation = new AnimationState();
 
     // --- COMPONENTE LÓGICO ---
     private final DroneAiLogic aiLogic; // Nuestra caja de herramientas
 
-    private final ItemStackHandler inventory = new ItemStackHandler(12) {
+    private final ItemStackHandler inventory = new ItemStackHandler(13) {
         @Override
         public int getSlotLimit(int slot) {
             return 16;
@@ -108,12 +106,22 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     @Override
     protected void registerGoals() {
         super.registerGoals();
-        this.goalSelector.addGoal(1, new LookAtPlayerGoal(this, Player.class, 8.0F, 1F));
 
-        for (var factory : DroneGoalRegistry.getFactories()) {
-            Goal goal = factory.apply(this);
-            this.goalSelector.addGoal(2, goal);
+        for (DroneGoalRegistry.StateDefinition def : DroneGoalRegistry.getDefinitions()) {
+            // Creamos el goal usando la fábrica
+            Goal goal = def.factory().apply(this);
+
+            // Lo registramos con SU prioridad definida en el registro
+            this.goalSelector.addGoal(def.priority(), goal);
         }
+
+        // PRIORIDAD 5: MIRAR AL JUGADOR (Ocio / "Recreo")
+        // Este Goal requiere el flag LOOK.
+        // Como PickupGoal y MineGoal TAMBIÉN usan Flag.LOOK, si cualquiera de los dos
+        // anteriores está activo, este Goal de prioridad 5 será bloqueado automáticamente
+        // por el sistema de IA de Minecraft.
+        // Resultado: El dron solo te mira cuando no tiene nada mejor que hacer.
+        this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 8.0F, 1F));
     }
 
     @Override
@@ -154,7 +162,7 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
-        builder.define(STATE, DroneStateIds.IDLE)
+        builder.define(STATE, ModKeys.STATE_IDLE)
                 .define(OWNER, Optional.empty());
     }
 
@@ -221,11 +229,6 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     }
 
     // --- MENU PROVIDER ---
-    @Override
-    public @NotNull Component getDisplayName() {
-        return Component.translatable("gui.assistance_drone.drone_title");
-    }
-
     @Override
     public @Nullable AbstractContainerMenu createMenu(int pContainerId, @NotNull Inventory pPlayerInventory, @NotNull Player pPlayer) {
         FriendlyByteBuf packetBuffer = new FriendlyByteBuf(Unpooled.buffer());

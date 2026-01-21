@@ -2,6 +2,7 @@ package com.uemc.assistance_drone.items;
 
 import com.uemc.assistance_drone.entities.ModEntities;
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
+import com.uemc.assistance_drone.util.ModKeys;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.player.Player;
@@ -14,7 +15,7 @@ import net.minecraft.world.phys.Vec3;
 
 public class DroneItem extends Item {
 
-    public static final String ID = "drone_item";
+    public static final String ID = ModKeys.DRONE_ITEM_KEY;
     private static final double SPAWN_RANGE = 5.0;
 
     public DroneItem(Properties pProperties) {
