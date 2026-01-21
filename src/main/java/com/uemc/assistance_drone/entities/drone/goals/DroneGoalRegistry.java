@@ -39,12 +39,10 @@ public class DroneGoalRegistry {
 
     private static final Map<String, StateDefinition> REGISTRY = new LinkedHashMap<>();
 
-    // Método de registro completo
     public static void register(String id, int priority, Function<DroneEntity, Goal> factory, Predicate<DroneEntity> requirement) {
         REGISTRY.put(id, new StateDefinition(id, priority, factory, requirement));
     }
 
-    // Sobrecarga para estados simples
     public static void register(String id, int priority, Function<DroneEntity, Goal> factory) {
         register(id, priority, factory, d -> true);
     }
@@ -54,20 +52,20 @@ public class DroneGoalRegistry {
     public static StateDefinition get(String id) { return REGISTRY.get(id); }
 
     static {
-        // 1. IDLE & FOLLOW (Sin requisitos especiales)
+        // IDLE & FOLLOW (Sin requisitos especiales)
         register(ModKeys.STATE_IDLE, 4, DroneIdleGoal::new);
         register(ModKeys.STATE_FOLLOW, 3, DroneFollowGoal::new);
 
-        // 2. MINE (Requiere Site Planner)
-        // Definimos la regla AQUÍ. El "qué" y el "por qué" viven juntos.
-        register(ModKeys.STATE_MINE, 2,
-                drone -> new DroneMineGoal(drone, s -> s.equals(ModKeys.STATE_MINE)),
+        // PICKUP (Requiere Site Planner)
+        register(ModKeys.STATE_PICKUP, 1,
+                drone -> new DronePickupGoal(drone, s -> s.equals(ModKeys.STATE_PICKUP) || s.equals(ModKeys.STATE_MINE)),
                 DroneEntity::hasSitePlanner
         );
 
-        // 3. PICKUP (Requiere Site Planner)
-        register(ModKeys.STATE_PICKUP, 1,
-                drone -> new DronePickupGoal(drone, s -> s.equals(ModKeys.STATE_PICKUP) || s.equals(ModKeys.STATE_MINE)),
+        // MINE (Requiere Site Planner)
+        // Definimos la regla AQUÍ. El "qué" y el "por qué" viven juntos.
+        register(ModKeys.STATE_MINE, 2,
+                drone -> new DroneMineGoal(drone, s -> s.equals(ModKeys.STATE_MINE)),
                 DroneEntity::hasSitePlanner
         );
     }

@@ -18,7 +18,7 @@ public class ModSoundProvider extends SoundDefinitionsProvider {
         add(ModSounds.DRONE_FLYING, definition()
                 .with(
                         sound(AssistanceDrone.MODID + ":" + ModKeys.DRONE_FLYING_SOUND_KEY)
-                                .volume(0.3f)
+                                .volume(0.1f)
                                 .pitch(1.0f)
                 )
                 .subtitle(ModKeys.SUBTITLE_FLYING_KEY)
