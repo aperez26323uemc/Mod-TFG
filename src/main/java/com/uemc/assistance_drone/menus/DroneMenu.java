@@ -4,6 +4,7 @@ import com.mojang.datafixers.util.Pair;
 import com.uemc.assistance_drone.AssistanceDrone;
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import com.uemc.assistance_drone.items.ModItems;
+import com.uemc.assistance_drone.items.SitePlanner;
 import com.uemc.assistance_drone.util.ModKeys;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -42,8 +43,9 @@ public class DroneMenu extends AbstractContainerMenu {
         // 1. Site Planner Slot (Index 0)
         this.addSlot(new SlotItemHandler(this.drone.getInventory(), 0, 117, 52){
             @Override
-            public boolean mayPlace(ItemStack stack) {
-                return stack.is(ModItems.SITE_PLANNER);
+            public boolean mayPlace(@NotNull ItemStack stack) {
+                // SOLO permitimos colocarlo si es un SitePlanner Y está configurado
+                return stack.is(ModItems.SITE_PLANNER.get()) && SitePlanner.isConfigured(stack);
             }
 
             @Override

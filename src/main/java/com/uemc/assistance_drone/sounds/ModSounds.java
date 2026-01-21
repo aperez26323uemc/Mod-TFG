@@ -15,6 +15,6 @@ public class ModSounds {
     public static final DeferredHolder<SoundEvent, SoundEvent> DRONE_FLYING =
             SOUNDS.register(ModKeys.DRONE_FLYING_SOUND_KEY,
                     () -> SoundEvent.createVariableRangeEvent(
-                            ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "sounds/drone_flying")
+                            ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, ModKeys.DRONE_FLYING_SOUND_KEY)
                     ));
 }

@@ -27,12 +27,14 @@ public class ModKeys {
     // ====================
     //  Translation Keys (Para en_us.json)
     // ====================
+    public static final String SUBTITLE_FLYING_KEY = "subtitles.assistance_drone." + DRONE_FLYING_SOUND_KEY;
 
     // GUI General
     public static final String GUI_CREATIVE_MODE_TAB_TITLE = "itemGroup." + CREATIVE_MODE_TAB_KEY; // Standard Minecraft format
     public static final String GUI_DRONE_MENU_TITLE = "gui.assistance_drone.drone_title";
     public static final String GUI_DRONE_MENU_MODES_LABEL = "gui.assistance_drone.modes_label";
     public static final String GUI_DRONE_MENU_STORAGE_LABEL = "gui.assistance_drone.storage_label";
+    public static final String GUI_SITE_PLANNER_SLOT_HINT = "gui.assistance_drone.slot.hint.site_planner";
 
     // Site Planner Messages
     public static final String GUI_SITE_PLANNER_START_SET = "gui.assistance_drone.site_planner.start_set";
@@ -41,6 +43,13 @@ public class ModKeys {
     public static final String GUI_SITE_PLANNER_CLEARED = "gui.assistance_drone.site_planner.selection_cleared";
     public static final String GUI_SITE_PLANNER_CANCELLED = "gui.assistance_drone.site_planner.selection_cancelled";
     public static final String GUI_SITE_PLANNER_ERROR_VOLUME = "gui.assistance_drone.site_planner.error.volume_too_small";
+
+    // Tooltips (Site Planner)
+    public static final String TOOLTIP_SITE_PLANNER_NO_SELECTION = "tooltip.assistance_drone.site_planner.no_selection";
+    public static final String TOOLTIP_SITE_PLANNER_INCOMPLETE = "tooltip.assistance_drone.site_planner.incomplete";
+    public static final String TOOLTIP_SITE_PLANNER_START = "tooltip.assistance_drone.site_planner.start";
+    public static final String TOOLTIP_SITE_PLANNER_END = "tooltip.assistance_drone.site_planner.end";
+    public static final String TOOLTIP_SITE_PLANNER_VOLUME = "tooltip.assistance_drone.site_planner.volume";
 
     // Prefijos para Estados (Privados, se acceden vía helper)
     private static final String GUI_STATE_TITLE_PREFIX = "gui.assistance_drone.state.title.";

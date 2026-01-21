@@ -1,5 +1,7 @@
 package com.uemc.assistance_drone.entities.drone;
 
+import com.uemc.assistance_drone.entities.drone.goals.DroneGoalRegistry;
+import com.uemc.assistance_drone.items.ModItems;
 import com.uemc.assistance_drone.menus.DroneMenu;
 import com.uemc.assistance_drone.util.ModKeys;
 import io.netty.buffer.Unpooled;
@@ -44,6 +46,8 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
             SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Optional<UUID>> OWNER =
             SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<Boolean> HAS_PLANNER =
+            SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.BOOLEAN);
 
     public static Supplier<EntityType<DroneEntity>> ENTITY_TYPE_SUPPLIER =
             () -> EntityType.Builder.of(DroneEntity::new, MobCategory.MISC)
@@ -96,6 +100,15 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         super.tick();
 
         if (!this.level().isClientSide) {
+            ItemStack stack = this.inventory.getStackInSlot(0);
+            boolean present = !stack.isEmpty() && stack.getItem() == ModItems.SITE_PLANNER.get();
+            this.entityData.set(HAS_PLANNER, present);
+            String currentState = this.getState();
+            DroneGoalRegistry.StateDefinition def = DroneGoalRegistry.get(currentState);
+            if (def != null && !def.isAvailable(this)) {
+                this.setState(ModKeys.STATE_IDLE);
+            }
+
             this.setYRot(this.getYHeadRot());
         }
         if (this.level().isClientSide) {
@@ -163,7 +176,12 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(STATE, ModKeys.STATE_IDLE)
-                .define(OWNER, Optional.empty());
+                .define(OWNER, Optional.empty())
+                .define(HAS_PLANNER, false);
+    }
+
+    public boolean hasSitePlanner() {
+        return this.entityData.get(HAS_PLANNER);
     }
 
     public UUID getOwnerUUID() {

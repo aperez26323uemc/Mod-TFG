@@ -1,17 +1,20 @@
 package com.uemc.assistance_drone.items;
 
 import com.uemc.assistance_drone.util.ModKeys;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nullable;
+import java.util.List;
 
 public class SitePlanner extends Item {
     public static final String ID = ModKeys.SITE_PLANNER_ITEM_KEY;
@@ -106,6 +109,58 @@ public class SitePlanner extends Item {
             }
         }
         return InteractionResult.SUCCESS;
+    }
+
+    /**
+     * Tooltip Dinámico: Muestra coordenadas y volumen con colores.
+     */
+    @Override
+    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
+        BlockPos start = getStartPos(stack);
+        BlockPos end = getEndPos(stack);
+
+        if (start == null) {
+            // CASO 1: No hay nada seleccionado (Gris)
+            tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_NO_SELECTION)
+                    .withStyle(ChatFormatting.GRAY));
+        } else {
+            // CASO 2: Hay inicio seleccionado (Verde)
+            tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_START,
+                            start.getX(), start.getY(), start.getZ())
+                    .withStyle(ChatFormatting.GREEN));
+
+            if (end == null) {
+                // CASO 2b: Falta el final (Amarillo claro / Pista)
+                tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_INCOMPLETE)
+                        .withStyle(ChatFormatting.YELLOW));
+            } else {
+                // CASO 3: Selección completa
+
+                // End Position (Azul Aqua)
+                tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_END,
+                                end.getX(), end.getY(), end.getZ())
+                        .withStyle(ChatFormatting.AQUA));
+
+                // Separador o espacio visual (opcional)
+
+                // Volumen (Oro)
+                long vol = calculateVolume(start, end);
+                tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_VOLUME, vol)
+                        .withStyle(ChatFormatting.GOLD));
+            }
+        }
+
+        super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
+    }
+
+    /**
+     * Verifica si el item tiene una configuración válida (Inicio y Fin definidos).
+     */
+    public static boolean isConfigured(ItemStack stack) {
+        return !stack.isEmpty()
+                && stack.getItem() instanceof SitePlanner
+                && getStartPos(stack) != null
+                && getEndPos(stack) != null;
     }
 
     private void setStartPos(ItemStack stack, BlockPos pos) {

@@ -25,6 +25,9 @@ public class ModLanguageProvider extends LanguageProvider {
         // --- CREATIVE TABS ---
         add(ModKeys.GUI_CREATIVE_MODE_TAB_TITLE, "Assistance Drone");
 
+        // --- SUBTITLES ---
+        add(ModKeys.SUBTITLE_FLYING_KEY, "Drone humming");
+
         // --- INTERFAZ (GUI) ---
         // Claves personalizadas que usar en los menús
         add(ModKeys.GUI_DRONE_MENU_TITLE, "Drone");
@@ -38,6 +41,14 @@ public class ModLanguageProvider extends LanguageProvider {
         add(ModKeys.GUI_SITE_PLANNER_CLEARED, "Selection cleared!");
         add(ModKeys.GUI_SITE_PLANNER_CANCELLED, "Selection cancelled (Item changed).");
         add(ModKeys.GUI_SITE_PLANNER_ERROR_VOLUME, "§cError: Volume is too small (%s blocks). Minimum is 8.");
+        add(ModKeys.GUI_SITE_PLANNER_SLOT_HINT, "Place configured Site Planner here");
+
+        // Tooltips
+        add(ModKeys.TOOLTIP_SITE_PLANNER_NO_SELECTION, "No area selected");
+        add(ModKeys.TOOLTIP_SITE_PLANNER_INCOMPLETE, "Waiting for End position...");
+        add(ModKeys.TOOLTIP_SITE_PLANNER_START, "Start: [%s, %s, %s]");
+        add(ModKeys.TOOLTIP_SITE_PLANNER_END, "End: [%s, %s, %s]");
+        add(ModKeys.TOOLTIP_SITE_PLANNER_VOLUME, "Total Volume: %s blocks");
 
         // --- ESTADOS (GUI) ---
         // 1. IDLE
