@@ -1,5 +1,6 @@
 package com.uemc.assistance_drone.entities.drone;
 
+import com.uemc.assistance_drone.entities.drone.goals.DroneFluidHandlerGoal;
 import com.uemc.assistance_drone.entities.drone.goals.DroneGoalRegistry;
 import com.uemc.assistance_drone.items.ModItems;
 import com.uemc.assistance_drone.menus.DroneMenu;
@@ -28,7 +29,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -96,6 +100,16 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     }
 
     @Override
+    public boolean isPushedByFluid(FluidType type) {
+        return false;
+    }
+
+    @Override
+    public void updateFluidHeightAndDoFluidPushing() {
+        return;
+    }
+
+    @Override
     public void tick() {
         super.tick();
 
@@ -128,12 +142,11 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
             this.goalSelector.addGoal(def.priority(), goal);
         }
 
-        // PRIORIDAD 5: MIRAR AL JUGADOR (Ocio / "Recreo")
-        // Este Goal requiere el flag LOOK.
-        // Como PickupGoal y MineGoal TAMBIÉN usan Flag.LOOK, si cualquiera de los dos
-        // anteriores está activo, este Goal de prioridad 5 será bloqueado automáticamente
-        // por el sistema de IA de Minecraft.
-        // Resultado: El dron solo te mira cuando no tiene nada mejor que hacer.
+        this.goalSelector.addGoal(1, new DroneFluidHandlerGoal(
+                this,
+                state -> state.equals(ModKeys.STATE_MINE)
+        ));
+
         this.goalSelector.addGoal(5, new LookAtPlayerGoal(this, Player.class, 8.0F, 1F));
     }
 

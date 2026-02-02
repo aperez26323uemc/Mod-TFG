@@ -1,7 +1,7 @@
 package com.uemc.assistance_drone.entities.drone.goals;
 
+import com.mojang.logging.LogUtils;
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
-import com.uemc.assistance_drone.items.ModItems;
 import com.uemc.assistance_drone.items.SitePlanner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -10,143 +10,111 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.Comparator;
-import java.util.EnumSet;
-import java.util.List;
+import java.util.*;
 import java.util.function.Predicate;
 
 public class DronePickupGoal extends Goal {
     private final DroneEntity drone;
     private final Predicate<String> activationCondition;
-
-    // Variables de control
-    private ItemEntity targetItem;
-    private int checkCooldown = 0; // Para el chequeo cada 0.5s
-    private static final int CHECK_INTERVAL = 10; // 10 ticks = 0.5 segundos
-    private static final double PICKUP_REACH_SQR = 0.8 * 0.8; // 0.8 bloques al cuadrado para comparaciones rápidas
+    private final Queue<ItemEntity> pickupQueue = new LinkedList<>();
+    private ItemEntity currentTarget;
+    private int checkCooldown = 0;
 
     public DronePickupGoal(DroneEntity drone, Predicate<String> activationCondition) {
         this.drone = drone;
         this.activationCondition = activationCondition;
-        // Reclamamos MOVE y LOOK (Exclusividad mientras trabaja)
         this.setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
     }
 
     @Override
     public boolean canUse() {
-        // 1. Chequeo de estado externo (Inyectado)
-        if (!activationCondition.test(drone.getState())) {
-            return false;
-        }
+        if (!activationCondition.test(drone.getState())) return false;
+        if (this.checkCooldown-- > 0) return false;
 
-        // 2. Optimización: Solo chequeamos cada 0.5s si no tenemos objetivo
-        if (this.checkCooldown > 0) {
-            this.checkCooldown--;
-            return false;
-        }
-        this.checkCooldown = CHECK_INTERVAL;
-
-        // 3. Buscar objetivo
-        this.targetItem = findClosestItem();
-        return this.targetItem != null;
-    }
-
-    @Override
-    public boolean canContinueToUse() {
-        // Seguimos si el estado es válido, el item existe, no ha muerto y no lo hemos recogido aún
-        return activationCondition.test(drone.getState())
-                && this.targetItem != null
-                && this.targetItem.isAlive()
-                && !this.targetItem.getItem().isEmpty(); // Que el stack en el suelo no esté vacío
+        this.checkCooldown = 10;
+        return populatePickupQueue();
     }
 
     @Override
     public void start() {
-        // Iniciamos movimiento
-        this.drone.getNavigation().moveTo(this.targetItem, 1.0D);
+        nextTarget();
     }
 
     @Override
     public void stop() {
-        // Limpieza al terminar o ser interrumpido
-        this.targetItem = null;
+        this.currentTarget = null;
+        this.pickupQueue.clear();
         this.drone.getNavigation().stop();
-        Vec3 current = drone.getLogic().calculateIdealPosition(drone.getX(), drone.getY(), drone.getZ());
-        Vec3 targetPos = new Vec3(current.x, current.y, current.z);
-        drone.getLogic().executeMovement(targetPos);
     }
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DronePickupGoal.class);
 
     @Override
     public void tick() {
-        if (this.targetItem == null) return;
+        if (!isValidTarget(currentTarget)) {
+            nextTarget();
+        }
+        if (currentTarget == null) return;
+        LOGGER.debug("DronePickupGoal target: {}", currentTarget);
 
-        // 1. Mirar al ítem
-        this.drone.getLookControl().setLookAt(this.targetItem, 30.0F, 30.0F);
+        this.drone.getLookControl().setLookAt(this.currentTarget, 30.0F, 30.0F);
 
-        // 2. Navegación constante (por si el ítem se mueve)
-        if (this.drone.tickCount % 5 == 0) { // No recálcules el path cada tick, es caro
-            this.drone.getNavigation().moveTo(this.targetItem, 1.0D);
+        // Movimiento
+        if (this.drone.tickCount % 5 == 0) {
+            this.drone.getNavigation().moveTo(this.currentTarget, 1.0D);
         }
 
-        // 3. --- OSCILACIÓN AGRESIVA ---
-        double oscillation = Math.sin(this.drone.tickCount * 0.3) * 0.05;
+        // Intento de recogida
+        // Usamos una comprobación de distancia simple aquí antes de llamar a la lógica pesada
+        if (this.drone.distanceToSqr(this.currentTarget) <= 2.25) { // 1.5 * 1.5
+            // Llamamos a itemPickUp() que gestiona la recogida real
+            boolean pickedUp = this.drone.getLogic().itemPickUp(); // DELEGADO
 
-        // Inyectamos la velocidad directamente. Si la oscilación es negativa, empuja abajo.
-        this.drone.setDeltaMovement(this.drone.getDeltaMovement().add(0, oscillation, 0));
-
-        // 4. Verificar distancia y Recoger
-        double distSqr = this.drone.distanceToSqr(this.targetItem);
-        if (distSqr <= PICKUP_REACH_SQR) {
-            pickUpItem();
-        }
-    }
-
-    // --- LÓGICA INTERNA ---
-
-    private void pickUpItem() {
-        ItemStack stackOnGround = this.targetItem.getItem();
-
-        // Intentamos meter el item en el inventario del Dron
-        // ItemHandlerHelper maneja automáticamente slots, stacks parciales, etc.
-        ItemStack remainder = ItemHandlerHelper.insertItemStacked(this.drone.getInventory(), stackOnGround, false);
-
-        if (remainder.isEmpty()) {
-            this.targetItem.discard();
-            this.targetItem = null;
-        } else {
-            // Se guardó PARTE (inventario casi lleno): Actualizamos lo que queda en el suelo
-            this.targetItem.setItem(remainder);
-            this.stop();
+            if (pickedUp) {
+                // Si recogimos algo, asumimos que fue el target actual (o uno cercano)
+                // y pasamos al siguiente.
+                nextTarget();
+            } else {
+                // Si estamos cerca pero no lo recogió, probablemente inventario lleno
+                if (!this.drone.getLogic().hasInventorySpaceFor(currentTarget.getItem())) {
+                    this.pickupQueue.clear(); // Abortar misión
+                    this.currentTarget = null;
+                }
+            }
         }
     }
 
-    private ItemEntity findClosestItem() {
-        // 1. Obtener el Site Planner del slot 0
+    private void nextTarget() {
+        this.currentTarget = this.pickupQueue.poll();
+        if (this.currentTarget != null) {
+            this.drone.getNavigation().moveTo(this.currentTarget, 1.0D);
+        }
+    }
+
+    private boolean populatePickupQueue() {
+        this.pickupQueue.clear();
         ItemStack plannerStack = this.drone.getInventory().getStackInSlot(0);
-
-        // 2. Validar que tenemos área configurada
-        if (!SitePlanner.isConfigured(plannerStack)) {
-            return null;
-        }
+        if (!SitePlanner.isConfigured(plannerStack)) return false;
 
         BlockPos start = SitePlanner.getStartPos(plannerStack);
         BlockPos end = SitePlanner.getEndPos(plannerStack);
+        AABB searchArea = new AABB(start).minmax(new AABB(end)).expandTowards(1, 1, 1);
 
-        if(start == null || end == null) return null;
-        // 3. Crear la caja de búsqueda (AABB)
-        // AABB toma min y max, así que ordenamos las coordenadas
-        AABB searchArea = new AABB(start).minmax(new AABB(end)).expandTowards(1, 1, 1); // Expandimos +1 para cubrir el bloque completo final
-
-        // 4. Obtener entidades en el área
         List<ItemEntity> items = this.drone.level().getEntitiesOfClass(ItemEntity.class, searchArea);
 
-        // 5. Filtrar y Ordenar
-        return items.stream()
-                .filter(ItemEntity::isAlive) // Solo items vivos
-                .filter(item -> !item.getItem().isEmpty()) // Que no sean fantasmas
-                // Opcional: Filtrar si el inventario del dron ya está lleno para este item específico
-                .min(Comparator.comparingDouble(this.drone::distanceToSqr)) // El más cercano
-                .orElse(null);
+        items.stream()
+                .filter(this::isValidTarget)
+                .filter(item -> this.drone.getLogic().hasInventorySpaceFor(item.getItem())) // DELEGADO
+                .sorted(Comparator.comparingDouble(this.drone::distanceToSqr))
+                .forEach(pickupQueue::add);
+
+        return !pickupQueue.isEmpty();
+    }
+
+    private boolean isValidTarget(ItemEntity item) {
+        return item != null && item.isAlive() && !item.getItem().isEmpty();
     }
 }

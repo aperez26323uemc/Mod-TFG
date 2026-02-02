@@ -54,17 +54,16 @@ public class DroneGoalRegistry {
     static {
         // IDLE & FOLLOW (Sin requisitos especiales)
         register(ModKeys.STATE_IDLE, 4, DroneIdleGoal::new);
-        register(ModKeys.STATE_FOLLOW, 3, DroneFollowGoal::new);
+        register(ModKeys.STATE_FOLLOW, 4, DroneFollowGoal::new);
 
         // PICKUP (Requiere Site Planner)
-        register(ModKeys.STATE_PICKUP, 1,
+        register(ModKeys.STATE_PICKUP, 2,
                 drone -> new DronePickupGoal(drone, s -> s.equals(ModKeys.STATE_PICKUP) || s.equals(ModKeys.STATE_MINE)),
                 DroneEntity::hasSitePlanner
         );
 
         // MINE (Requiere Site Planner)
-        // Definimos la regla AQUÍ. El "qué" y el "por qué" viven juntos.
-        register(ModKeys.STATE_MINE, 2,
+        register(ModKeys.STATE_MINE, 3,
                 drone -> new DroneMineGoal(drone, s -> s.equals(ModKeys.STATE_MINE)),
                 DroneEntity::hasSitePlanner
         );
