@@ -1,3 +1,8 @@
 {
-
+  "required": true,
+  "package": "com.uemc.assistance_drone.mixin",
+  "mixins": [
+    "BeaconBlockEntityMixin"
+  ],
+  "verbose": true
 }

@@ -41,7 +41,7 @@ public class DroneFluidHandlerGoal extends Goal { /* ========================== 
     @Override
     public boolean canUse() {
         if (!activationCondition.test(drone.getState())) return false;
-        if (drone.getLogic().findBlockSlot() == -1) return false;
+        if (drone.getLogic().findSlotWithFluidRemoverBlock() == -1) return false;
         if (scanCooldown-- > 0) return false;
         scanCooldown = 10;
         target = scanForFluidThreat();
@@ -50,7 +50,7 @@ public class DroneFluidHandlerGoal extends Goal { /* ========================== 
 
     @Override
     public boolean canContinueToUse() {
-        return activationCondition.test(drone.getState()) && target != null && drone.getLogic().findBlockSlot() != -1 && !drone.getNavigation().isStuck();
+        return activationCondition.test(drone.getState()) && target != null && drone.getLogic().findSlotWithFluidRemoverBlock() != -1 && !drone.getNavigation().isStuck();
     }
 
     @Override
@@ -245,7 +245,7 @@ public class DroneFluidHandlerGoal extends Goal { /* ========================== 
     }
 
     private boolean placeBlock(BlockPos pos) {
-        int slot = drone.getLogic().findBlockSlot();
+        int slot = drone.getLogic().findSlotWithFluidRemoverBlock();
         if (slot == -1) return false;
         Level level = drone.level();
         BlockState state = level.getBlockState(pos);

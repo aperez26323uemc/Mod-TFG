@@ -1,5 +1,6 @@
 package com.uemc.assistance_drone;
 
+import com.uemc.assistance_drone.advancements.ModCriteriaTriggers;
 import com.uemc.assistance_drone.entities.ModEntities;
 import com.uemc.assistance_drone.items.ModItems;
 import com.uemc.assistance_drone.menus.ModMenus;
@@ -45,6 +46,7 @@ public class AssistanceDrone
 
         ModMenus.MENU_TYPES.register(modEventBus);
         ModSounds.SOUNDS.register(modEventBus);
+        ModCriteriaTriggers.register(modEventBus);
 
         // Register ourselves for server and other game events we are interested in.
         // Note that this is necessary if and only if we want *this* class (assistance_drone) to respond directly to events.

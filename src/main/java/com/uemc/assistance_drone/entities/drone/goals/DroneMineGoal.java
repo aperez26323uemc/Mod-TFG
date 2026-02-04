@@ -102,9 +102,6 @@ public class DroneMineGoal extends Goal {
         Level level = this.drone.level();
         if (level.isClientSide) return;
 
-        this.drone.getLogic().applyMiningSpeedBuffs(level);
-
-
         BlockPos suffocating = getSuffocatingBlock();
 
         // 1. DETERMINAR EL OBJETIVO ACTIVO

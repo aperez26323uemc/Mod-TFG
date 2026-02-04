@@ -56,6 +56,12 @@ public class ModKeys {
     private static final String GUI_STATE_DESCRIPTION_PREFIX = "gui.assistance_drone.state.desc.";
 
     // ====================
+    //  ADVANCEMENTS
+    // ====================
+    public static final String ADVANCEMENT_DRONE_HASTE_TITLE = "advancement.assistance_drone.drone_haste.title";
+    public static final String ADVANCEMENT_DRONE_HASTE_DESCRIPTION = "advancement.assistance_drone.drone_haste.description";
+
+    // ====================
     //  Helpers
     // ====================
     /** Returns: gui.assistance_drone.state.title.{stateId} */

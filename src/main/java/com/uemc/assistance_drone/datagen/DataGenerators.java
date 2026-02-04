@@ -27,5 +27,8 @@ public class DataGenerators {
 
         // 3. Sonidos
         generator.addProvider(event.includeClient(), new ModSoundProvider(packOutput, event.getExistingFileHelper()));
+
+        // 4. Advancements
+        generator.addProvider(event.includeServer(), new ModAdvancementProvider(packOutput, lookupProvider, event.getExistingFileHelper()));
     }
 }

@@ -66,5 +66,9 @@ public class ModLanguageProvider extends LanguageProvider {
         // 4. PICKUP
         add(ModKeys.getStateTitleKey(ModKeys.STATE_PICKUP), "Pickup");
         add(ModKeys.getStateDescKey(ModKeys.STATE_PICKUP), "Drone will collect items in the area designated by the site planner");
+
+        // --- ADVANCEMENTS ---
+        add(ModKeys.ADVANCEMENT_DRONE_HASTE_TITLE, "Hastening Drones!");
+        add(ModKeys.ADVANCEMENT_DRONE_HASTE_DESCRIPTION, "Empower a Assistance Drone with a Haste Beacon");
     }
 }
