@@ -40,11 +40,22 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+/**
+ * Flying utility entity controlled by an internal state-based AI.
+ * <p>
+ * The drone supports inventory handling, ownership, persistent state,
+ * and a modular goal system driven by {@link DroneGoalRegistry}.
+ */
 public class DroneEntity extends PathfinderMob implements MenuProvider {
+
+    /* ------------------------------------------------------------ */
+    /* Constants & Entity Data                                      */
+    /* ------------------------------------------------------------ */
 
     public static final String NAME = ModKeys.DRONE_ENTITY_KEY;
     private static final float DRONE_WIDTH = 0.7F;
     private static final float DRONE_HEIGHT = 0.6F;
+
     private static final EntityDataAccessor<String> STATE =
             SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.STRING);
     private static final EntityDataAccessor<Optional<UUID>> OWNER =
@@ -52,15 +63,18 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     private static final EntityDataAccessor<Boolean> HAS_PLANNER =
             SynchedEntityData.defineId(DroneEntity.class, EntityDataSerializers.BOOLEAN);
 
-    public static Supplier<EntityType<DroneEntity>> ENTITY_TYPE_SUPPLIER =
+    public static final Supplier<EntityType<DroneEntity>> ENTITY_TYPE_SUPPLIER =
             () -> EntityType.Builder.of(DroneEntity::new, MobCategory.MISC)
                     .sized(DRONE_WIDTH, DRONE_HEIGHT)
                     .build(NAME);
 
+    /* ------------------------------------------------------------ */
+    /* Instance Fields                                              */
+    /* ------------------------------------------------------------ */
+
     public final AnimationState bladeAnimation = new AnimationState();
 
-    // --- COMPONENTE LÓGICO ---
-    private final DroneAiLogic aiLogic; // Caja de herramientas
+    private final DroneAiLogic aiLogic;
 
     private final ItemStackHandler inventory = new ItemStackHandler(13) {
         @Override
@@ -68,6 +82,10 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
             return 16;
         }
     };
+
+    /* ------------------------------------------------------------ */
+    /* Construction & Attributes                                    */
+    /* ------------------------------------------------------------ */
 
     public DroneEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -85,9 +103,11 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         this.setPathfindingMalus(PathType.LAVA, 1.0F);
         this.setPathfindingMalus(PathType.DANGER_FIRE, 0.5F);
         this.setPathfindingMalus(PathType.DAMAGE_FIRE, 0.5F);
-
     }
 
+    /**
+     * Defines the base attributes of the drone entity.
+     */
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 20.0)
@@ -96,7 +116,13 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
                 .add(Attributes.FOLLOW_RANGE, 48.0);
     }
 
-    // --- ACCESO A LA LÓGICA (Para los Goals) ---
+    /* ------------------------------------------------------------ */
+    /* Accessors                                                    */
+    /* ------------------------------------------------------------ */
+
+    /**
+     * Returns the AI logic controller used by goals.
+     */
     public DroneAiLogic getLogic() {
         return this.aiLogic;
     }
@@ -105,6 +131,9 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         return this.inventory;
     }
 
+    /**
+     * Checks whether the internal inventory contains any items.
+     */
     public boolean isInventoryEmpty() {
         for (int i = 0; i < inventory.getSlots(); i++) {
             if (!inventory.getStackInSlot(i).isEmpty()) {
@@ -114,11 +143,9 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         return true;
     }
 
-    @Override
-    public boolean isPushedByFluid(FluidType type) {return false;}
-
-    @Override
-    public void updateFluidHeightAndDoFluidPushing() {}
+    /* ------------------------------------------------------------ */
+    /* Ticking & Navigation                                         */
+    /* ------------------------------------------------------------ */
 
     @Override
     public void tick() {
@@ -126,17 +153,16 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
 
         if (!this.level().isClientSide) {
             ItemStack stack = this.inventory.getStackInSlot(0);
-            boolean present = !stack.isEmpty() && stack.getItem() == ModItems.SITE_PLANNER.get();
-            this.entityData.set(HAS_PLANNER, present);
-            String currentState = this.getState();
-            DroneGoalRegistry.StateDefinition def = DroneGoalRegistry.get(currentState);
+            boolean hasPlanner = !stack.isEmpty() && stack.getItem() == ModItems.SITE_PLANNER.get();
+            this.entityData.set(HAS_PLANNER, hasPlanner);
+
+            DroneGoalRegistry.StateDefinition def = DroneGoalRegistry.get(this.getState());
             if (def != null && !def.isAvailable(this)) {
                 this.setState(ModKeys.STATE_IDLE);
             }
 
             this.setYRot(this.getYHeadRot());
-        }
-        if (this.level().isClientSide) {
+        } else {
             this.bladeAnimation.startIfStopped(tickCount);
         }
     }
@@ -146,10 +172,7 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         super.registerGoals();
 
         for (DroneGoalRegistry.StateDefinition def : DroneGoalRegistry.getDefinitions()) {
-            // Creamos el goal usando la fábrica
             Goal goal = def.factory().apply(this);
-
-            // Lo registramos con SU prioridad definida en el registro
             this.goalSelector.addGoal(def.priority(), goal);
         }
 
@@ -170,8 +193,22 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         return nav;
     }
 
+    /* ------------------------------------------------------------ */
+    /* Movement & Damage                                            */
+    /* ------------------------------------------------------------ */
+
     @Override
-    public boolean isPushable() { return true; }
+    public boolean isPushedByFluid(FluidType type) {
+        return false;
+    }
+
+    @Override
+    public void updateFluidHeightAndDoFluidPushing() {}
+
+    @Override
+    public boolean isPushable() {
+        return true;
+    }
 
     @Override
     public boolean isInvulnerableTo(DamageSource source) {
@@ -180,14 +217,14 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     }
 
     @Override
-    public void travel(Vec3 pTravelVector) {
+    public void travel(Vec3 travelVector) {
         if (this.isControlledByLocalInstance()) {
             if (this.isInWater()) {
-                this.moveRelative(0.02F, pTravelVector);
+                this.moveRelative(0.02F, travelVector);
                 this.move(MoverType.SELF, this.getDeltaMovement());
                 this.setDeltaMovement(this.getDeltaMovement().scale(0.8F));
             } else {
-                this.moveRelative(this.getSpeed(), pTravelVector);
+                this.moveRelative(this.getSpeed(), travelVector);
                 this.move(MoverType.SELF, this.getDeltaMovement());
                 this.setDeltaMovement(this.getDeltaMovement().scale(0.99F));
             }
@@ -195,7 +232,10 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         this.calculateEntityAnimation(false);
     }
 
-    // --- DATOS Y PERSISTENCIA ---
+    /* ------------------------------------------------------------ */
+    /* Synced Data & Persistence                                    */
+    /* ------------------------------------------------------------ */
+
     @Override
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
@@ -204,15 +244,23 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
                 .define(HAS_PLANNER, false);
     }
 
+    public String getState() {
+        return this.entityData.get(STATE);
+    }
+
+    public void setState(String newState) {
+        this.entityData.set(STATE, newState);
+    }
+
     public boolean hasSitePlanner() {
         return this.entityData.get(HAS_PLANNER);
     }
 
-    public UUID getOwnerUUID() {
+    public @Nullable UUID getOwnerUUID() {
         return this.entityData.get(OWNER).orElse(null);
     }
 
-    public Player getOwner() {
+    public @Nullable Player getOwner() {
         UUID uuid = getOwnerUUID();
         return uuid != null ? level().getPlayerByUUID(uuid) : null;
     }
@@ -222,47 +270,41 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     }
 
     @Override
-    public void addAdditionalSaveData(@NotNull CompoundTag compound) {
-        super.addAdditionalSaveData(compound);
-        compound.putString("State", this.getState());
-        compound.put("Inventory", this.inventory.serializeNBT(this.registryAccess()));
+    public void addAdditionalSaveData(@NotNull CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        tag.putString("State", this.getState());
+        tag.put("Inventory", this.inventory.serializeNBT(this.registryAccess()));
 
         if (getOwnerUUID() != null) {
-            compound.putUUID("Owner", getOwnerUUID());
+            tag.putUUID("Owner", getOwnerUUID());
         }
     }
 
     @Override
-    public void readAdditionalSaveData(@NotNull CompoundTag compound) {
-        super.readAdditionalSaveData(compound);
-        if (compound.contains("State", 8)) {
-            this.setState(compound.getString("State"));
+    public void readAdditionalSaveData(@NotNull CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+
+        if (tag.contains("State", 8)) {
+            this.setState(tag.getString("State"));
         }
-        if (compound.contains("Inventory")) {
-            this.inventory.deserializeNBT(this.registryAccess(), compound.getCompound("Inventory"));
+        if (tag.contains("Inventory")) {
+            this.inventory.deserializeNBT(this.registryAccess(), tag.getCompound("Inventory"));
         }
-        if (compound.hasUUID("Owner")) {
-            this.entityData.set(OWNER, Optional.of(compound.getUUID("Owner")));
+        if (tag.hasUUID("Owner")) {
+            this.entityData.set(OWNER, Optional.of(tag.getUUID("Owner")));
         }
     }
 
-    public String getState() {
-        return this.entityData.get(STATE);
-    }
+    /* ------------------------------------------------------------ */
+    /* Interaction & Menu                                           */
+    /* ------------------------------------------------------------ */
 
-    public void setState(String newState) {
-        this.getEntityData().set(STATE, newState);
-    }
-
-    // --- INTERACCIÓN ---
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (!this.level().isClientSide()) {
-            // Recoger el dron si:
-            // - Shift pulsado
-            // - Es el dueño
-            // - Inventario vacío
-            if (!player.isSpectator() && player.isShiftKeyDown()
+
+            if (!player.isSpectator()
+                    && player.isShiftKeyDown()
                     && player.getUUID().equals(getOwnerUUID())
                     && this.isInventoryEmpty()) {
 
@@ -271,7 +313,6 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
                 return InteractionResult.SUCCESS;
             }
 
-            // Abrir menú
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.openMenu(this, buf -> buf.writeVarInt(this.getId()));
                 return InteractionResult.SUCCESS;
@@ -281,17 +322,27 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         return InteractionResult.sidedSuccess(this.level().isClientSide());
     }
 
-    // --- MENU PROVIDER ---
     @Override
-    public @Nullable AbstractContainerMenu createMenu(int pContainerId, @NotNull Inventory pPlayerInventory, @NotNull Player pPlayer) {
-        FriendlyByteBuf packetBuffer = new FriendlyByteBuf(Unpooled.buffer());
-        packetBuffer.writeVarInt(this.getId());
-        return new DroneMenu(pContainerId, pPlayerInventory, packetBuffer);
+    public @Nullable AbstractContainerMenu createMenu(
+            int containerId,
+            @NotNull Inventory playerInventory,
+            @NotNull Player player
+    ) {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        buffer.writeVarInt(this.getId());
+        return new DroneMenu(containerId, playerInventory, buffer);
     }
 
-    @Override
-    protected void checkFallDamage(double pY, boolean pOnGround, net.minecraft.world.level.block.state.BlockState pState, BlockPos pPos) {}
+    /* ------------------------------------------------------------ */
+    /* Disabled Ground Logic                                        */
+    /* ------------------------------------------------------------ */
 
     @Override
-    protected void playStepSound(BlockPos pPos, net.minecraft.world.level.block.state.BlockState pState) {}
+    protected void checkFallDamage(double y, boolean onGround,
+                                   net.minecraft.world.level.block.state.BlockState state,
+                                   BlockPos pos) {}
+
+    @Override
+    protected void playStepSound(BlockPos pos,
+                                 net.minecraft.world.level.block.state.BlockState state) {}
 }

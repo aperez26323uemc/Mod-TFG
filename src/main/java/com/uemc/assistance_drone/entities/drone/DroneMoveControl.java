@@ -5,33 +5,10 @@ import net.minecraft.world.entity.ai.control.MoveControl;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Custom movement controller for drone entities implementing physics-based flight.
+ * Custom movement controller implementing smooth, physics-inspired drone flight.
  * <p>
- * This controller uses a PD (Proportional-Derivative) control system to create
- * smooth, realistic drone movement with the following characteristics:
- * <ul>
- *   <li><b>Inertial movement</b> - Gradual acceleration and deceleration</li>
- *   <li><b>Dynamic braking</b> - Increased damping when approaching target</li>
- *   <li><b>Hovering oscillation</b> - Sinusoidal bobbing motion for visual realism</li>
- * </ul>
- * </p>
- *
- * <h3>Control System Parameters</h3>
- * <p>
- * The PD controller calculates acceleration as:<br>
- * {@code a = K_P * error - K_D * velocity}
- * </p>
- * <ul>
- *   <li>{@code K_P} - Proportional gain controlling attraction force</li>
- *   <li>{@code K_D} - Derivative gain controlling damping (resistance to velocity)</li>
- *   <li>{@code error} - Distance vector to target position</li>
- * </ul>
- *
- * <h3>Dynamic Braking</h3>
- * <p>
- * When within {@value BRAKING_RADIUS} blocks of target, damping increases linearly
- * from {@value BASE_K_D} to {@value BRAKING_K_D} to prevent overshooting.
- * </p>
+ * Uses a PD (Proportional–Derivative) control model with inertial movement,
+ * dynamic braking near the target and subtle hovering oscillation for visual realism.
  *
  * @see DroneEntity
  */
@@ -39,101 +16,71 @@ public class DroneMoveControl extends MoveControl {
 
     private final DroneEntity drone;
 
-    /** Maximum horizontal movement speed in blocks per tick */
+    /* ------------------------------------------------------------ */
+    /* Tuning Parameters                                            */
+    /* ------------------------------------------------------------ */
+
+    /** Maximum horizontal speed (blocks/tick) */
     private static final double MAX_HORIZONTAL_SPEED = 0.5;
 
-    /** Maximum vertical movement speed in blocks per tick */
+    /** Maximum vertical speed (blocks/tick) */
     private static final double MAX_VERTICAL_SPEED = 0.25;
 
-    /** Proportional gain - controls attraction force to target */
+    /** Proportional gain (attraction force to target) */
     private static final double K_P = 0.1;
 
-    /** Base derivative gain - controls velocity damping during normal flight */
+    /** Base derivative gain (velocity damping) */
     private static final double BASE_K_D = 0.08;
 
-    /** Braking derivative gain - high damping when approaching target */
+    /** Increased damping when approaching target */
     private static final double BRAKING_K_D = 0.3;
 
-    /** Distance at which braking begins (blocks) */
+    /** Distance at which braking starts (blocks) */
     private static final double BRAKING_RADIUS = 3.0;
 
-    /** Maximum acceleration per tick - simulates mass/motor limitations */
+    /** Maximum acceleration per tick */
     private static final double MAX_ACCELERATION = 0.025;
 
-    /** Vertical displacement amplitude for hovering oscillation (blocks) */
+    /** Vertical hover oscillation amplitude (blocks) */
     private static final double BOBBING_AMPLITUDE = 0.3;
 
-    /** Angular frequency of hovering oscillation (radians per tick) */
+    /** Hover oscillation speed (radians/tick) */
     private static final double BOBBING_SPEED = 0.15;
 
-    /**
-     * Constructs a new move controller for the specified drone.
-     *
-     * @param drone the drone entity to control
-     */
     public DroneMoveControl(DroneEntity drone) {
         super(drone);
         this.drone = drone;
     }
 
-    /**
-     * Updates the drone's velocity each tick using PD control with dynamic braking.
-     * <p>
-     * The method performs the following steps:
-     * <ol>
-     *   <li>Calculate target position including bobbing offset</li>
-     *   <li>Compute error vector and distance to target</li>
-     *   <li>Apply dynamic braking if within braking radius</li>
-     *   <li>Calculate PD-controlled acceleration</li>
-     *   <li>Limit acceleration and update velocity</li>
-     *   <li>Update drone rotation to face movement direction</li>
-     * </ol>
-     * </p>
-     */
     @Override
     public void tick() {
-        Vec3 targetPosition = calculateTargetWithBobbing();
-        Vec3 currentVelocity = drone.getDeltaMovement();
+        Vec3 target = calculateTargetWithBobbing();
+        Vec3 velocity = drone.getDeltaMovement();
 
-        Vec3 errorVector = calculateErrorVector(targetPosition);
-        double distance = errorVector.length();
+        Vec3 error = calculateErrorVector(target);
+        double distance = error.length();
 
-        double dampingFactor = calculateDampingFactor(distance);
-        Vec3 acceleration = calculatePDAcceleration(errorVector, currentVelocity, dampingFactor);
+        double damping = calculateDampingFactor(distance);
+        Vec3 acceleration = calculatePDAcceleration(error, velocity, damping);
         acceleration = limitAcceleration(acceleration);
 
-        Vec3 newVelocity = currentVelocity.add(acceleration);
-        applyVelocity(newVelocity);
-
-        updateRotation(errorVector);
+        applyVelocity(velocity.add(acceleration));
+        updateRotation(error);
     }
 
-    /**
-     * Calculates the target position including hovering oscillation.
-     * <p>
-     * If the operation is {@link Operation#MOVE_TO}, returns the desired position
-     * plus a sinusoidal vertical offset. Otherwise, maintains current horizontal
-     * position while hovering.
-     * </p>
-     *
-     * @return target position with bobbing applied
-     */
+    /* ------------------------------------------------------------ */
+    /* Target & Error                                               */
+    /* ------------------------------------------------------------ */
+
     private Vec3 calculateTargetWithBobbing() {
-        double bobbingOffset = Math.sin(drone.tickCount * BOBBING_SPEED) * BOBBING_AMPLITUDE;
+        double bobbing = Math.sin(drone.tickCount * BOBBING_SPEED) * BOBBING_AMPLITUDE;
 
         if (this.operation == Operation.MOVE_TO) {
-            return new Vec3(this.wantedX, this.wantedY + bobbingOffset, this.wantedZ);
-        } else {
-            return new Vec3(drone.getX(), drone.getY() + bobbingOffset, drone.getZ());
+            return new Vec3(this.wantedX, this.wantedY + bobbing, this.wantedZ);
         }
+        return new Vec3(drone.getX(), drone.getY() + bobbing, drone.getZ());
     }
 
-    /**
-     * Calculates the error vector from current to target position.
-     *
-     * @param target the target position
-     * @return vector pointing from current position to target
-     */
     private Vec3 calculateErrorVector(Vec3 target) {
         return new Vec3(
                 target.x - drone.getX(),
@@ -142,54 +89,31 @@ public class DroneMoveControl extends MoveControl {
         );
     }
 
-    /**
-     * Calculates the damping factor using dynamic braking.
-     * <p>
-     * Damping linearly interpolates from {@value BASE_K_D} to {@value BRAKING_K_D}
-     * as distance decreases from {@value BRAKING_RADIUS} to 0.
-     * </p>
-     *
-     * @param distance current distance to target
-     * @return damping coefficient for PD controller
-     */
+    /* ------------------------------------------------------------ */
+    /* Control Law                                                  */
+    /* ------------------------------------------------------------ */
+
     private double calculateDampingFactor(double distance) {
         if (distance < BRAKING_RADIUS) {
-            double brakingFactor = 1.0 - (distance / BRAKING_RADIUS);
-            return Mth.lerp(brakingFactor, BASE_K_D, BRAKING_K_D);
+            double factor = 1.0 - (distance / BRAKING_RADIUS);
+            return Mth.lerp(factor, BASE_K_D, BRAKING_K_D);
         }
         return BASE_K_D;
     }
 
     /**
-     * Calculates acceleration using PD control law.
+     * PD control: a = Kp * error − Kd * velocity.
      * <p>
-     * The acceleration is computed as:<br>
-     * {@code a = K_P * error - K_D * velocity}
-     * </p>
-     * <p>
-     * Horizontal axes (X and Z) receive additional damping (1.5x) to prevent
-     * lateral oscillation, while vertical axis (Y) uses standard damping.
-     * </p>
-     *
-     * @param error vector from current to target position
-     * @param velocity current velocity vector
-     * @param dampingFactor base damping coefficient (K_D)
-     * @return acceleration vector
+     * Horizontal axes receive extra damping to reduce lateral oscillation.
      */
-    private Vec3 calculatePDAcceleration(Vec3 error, Vec3 velocity, double dampingFactor) {
-        double ax = K_P * error.x - dampingFactor * 1.5 * velocity.x;
-        double ay = K_P * error.y - dampingFactor * velocity.y;
-        double az = K_P * error.z - dampingFactor * 1.5 * velocity.z;
+    private Vec3 calculatePDAcceleration(Vec3 error, Vec3 velocity, double damping) {
+        double ax = K_P * error.x - damping * 1.5 * velocity.x;
+        double ay = K_P * error.y - damping * velocity.y;
+        double az = K_P * error.z - damping * 1.5 * velocity.z;
 
         return new Vec3(ax, ay, az);
     }
 
-    /**
-     * Limits acceleration magnitude to simulate motor constraints.
-     *
-     * @param acceleration unconstrained acceleration vector
-     * @return acceleration vector clamped to {@value MAX_ACCELERATION}
-     */
     private Vec3 limitAcceleration(Vec3 acceleration) {
         double magnitude = acceleration.length();
         if (magnitude > MAX_ACCELERATION) {
@@ -198,15 +122,10 @@ public class DroneMoveControl extends MoveControl {
         return acceleration;
     }
 
-    /**
-     * Applies velocity to the drone with axis-specific limits.
-     * <p>
-     * Horizontal velocity is clamped to ±{@value MAX_HORIZONTAL_SPEED}<br>
-     * Vertical velocity is clamped to ±{@value MAX_VERTICAL_SPEED}
-     * </p>
-     *
-     * @param velocity the velocity to apply
-     */
+    /* ------------------------------------------------------------ */
+    /* Velocity & Rotation                                         */
+    /* ------------------------------------------------------------ */
+
     private void applyVelocity(Vec3 velocity) {
         double x = Mth.clamp(velocity.x, -MAX_HORIZONTAL_SPEED, MAX_HORIZONTAL_SPEED);
         double y = Mth.clamp(velocity.y, -MAX_VERTICAL_SPEED, MAX_VERTICAL_SPEED);
@@ -215,19 +134,10 @@ public class DroneMoveControl extends MoveControl {
         drone.setDeltaMovement(x, y, z);
     }
 
-    /**
-     * Updates the drone's yaw rotation to face the movement direction.
-     * <p>
-     * Rotation is only updated when horizontal movement exceeds a threshold
-     * to prevent erratic rotation when stationary.
-     * </p>
-     *
-     * @param error error vector used to determine facing direction
-     */
     private void updateRotation(Vec3 error) {
         if (error.x * error.x + error.z * error.z > 0.01) {
-            float targetYaw = (float) (Mth.atan2(error.z, error.x) * (180F / Math.PI)) - 90.0F;
-            drone.setYRot(this.rotlerp(drone.getYRot(), targetYaw, 5.0F));
+            float yaw = (float) (Mth.atan2(error.z, error.x) * (180F / Math.PI)) - 90.0F;
+            drone.setYRot(this.rotlerp(drone.getYRot(), yaw, 5.0F));
             drone.setYBodyRot(drone.getYRot());
         }
     }

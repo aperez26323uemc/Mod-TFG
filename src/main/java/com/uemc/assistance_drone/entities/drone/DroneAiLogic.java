@@ -5,7 +5,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -34,39 +33,23 @@ import java.util.Map;
 /**
  * Central logic component for drone AI operations.
  * <p>
- * This class encapsulates all complex decision-making and world interaction logic
- * for drones, including:
- * <ul>
- *   <li>Movement pathfinding and obstacle avoidance</li>
- *   <li>Block mining with tool selection and Haste effect support</li>
- *   <li>Inventory management and item pickup</li>
- *   <li>Block placement for fluid removal</li>
- *   <li>Accessibility caching for performance optimization</li>
- * </ul>
- * </p>
- *
- * <h3>Performance Optimizations</h3>
- * <p>
- * The class employs several caching strategies to reduce computational overhead:
- * <ul>
- *   <li>Block accessibility cache with position-based expiration</li>
- *   <li>Mining calculation cache for hardness and tool speed</li>
- *   <li>Haste amplifier tracking to detect buff changes</li>
- * </ul>
- * </p>
- *
- * @see DroneEntity
+ * Encapsulates all non-trivial decision-making and world interaction logic,
+ * including movement, mining, inventory handling, block placement and
+ * performance-oriented caching.
  */
 public class DroneAiLogic {
 
-    /** Maximum squared distance for direct line-of-sight movement (blocks²) */
+    /* ------------------------------------------------------------ */
+    /* Constants                                                    */
+    /* ------------------------------------------------------------ */
+
     private static final double MOVEMENT_THRESHOLD_SQR = 1.2;
-
-    /** Maximum squared distance for block interaction (blocks²) */
     private static final double INTERACT_RANGE_SQR = 4.0;
-
-    /** Minimum altitude offset above ground level (blocks) */
     private static final double MIN_ALTITUDE_OFFSET = 1.5;
+
+    /* ------------------------------------------------------------ */
+    /* State                                                        */
+    /* ------------------------------------------------------------ */
 
     private final DroneEntity drone;
 
@@ -83,35 +66,21 @@ public class DroneAiLogic {
     private final Map<BlockPos, CachedReachability> accessibilityCache = new HashMap<>();
     private BlockPos lastDronePos = null;
 
-    /**
-     * Cached accessibility result with expiration.
-     *
-     * @param expiryTick game tick when this cache entry expires
-     * @param reachable whether the position is accessible
-     */
     private record CachedReachability(long expiryTick, boolean reachable) {}
 
-    /**
-     * Constructs a new AI logic component for the specified drone.
-     *
-     * @param drone the drone entity this logic will control
-     */
     public DroneAiLogic(DroneEntity drone) {
         this.drone = drone;
     }
 
-    // ============================================================================================
-    // MOVEMENT LOGIC
-    // ============================================================================================
+    /* ------------------------------------------------------------ */
+    /* Movement                                                     */
+    /* ------------------------------------------------------------ */
 
     /**
-     * Executes movement toward a target position with line-of-sight optimization.
+     * Moves the drone towards a target position.
      * <p>
-     * If the target is within {@value MOVEMENT_THRESHOLD_SQR} blocks² and visible,
-     * uses direct movement. Otherwise, engages pathfinding navigation.
-     * </p>
-     *
-     * @param targetPos the position to move towards
+     * Uses direct movement when the target is close and visible,
+     * otherwise falls back to pathfinding.
      */
     public void executeMovement(Vec3 targetPos) {
         if (targetPos == null) return;
@@ -124,13 +93,12 @@ public class DroneAiLogic {
             drone.getNavigation().moveTo(targetPos.x, targetPos.y, targetPos.z, 1.0);
         } else {
             drone.getNavigation().stop();
-            drone.getMoveControl().setWantedPosition(targetPos.x, targetPos.y, targetPos.z, 1.0);
+            drone.getMoveControl().setWantedPosition(
+                    targetPos.x, targetPos.y, targetPos.z, 1.0
+            );
         }
     }
 
-    /**
-     * Clears the accessibility cache when the drone moves significantly.
-     */
     private void updateAccessibilityCacheIfMoved() {
         BlockPos currentPos = drone.blockPosition();
         if (lastDronePos == null || !lastDronePos.equals(currentPos)) {
@@ -141,12 +109,6 @@ public class DroneAiLogic {
         }
     }
 
-    /**
-     * Performs raycasting to determine if target position is visible.
-     *
-     * @param target the position to check visibility for
-     * @return {@code true} if there is a clear line of sight to the target
-     */
     private boolean canSeeTarget(Vec3 target) {
         BlockHitResult result = drone.level().clip(new ClipContext(
                 drone.position(),
@@ -155,43 +117,28 @@ public class DroneAiLogic {
                 ClipContext.Fluid.NONE,
                 drone
         ));
+
         return result.getType() == HitResult.Type.MISS
                 || result.getLocation().distanceToSqr(target) < 1.0;
     }
 
     /**
-     * Calculates a safe position offset from the owner.
-     * <p>
-     * Computes a position at the specified distance from the owner in the
-     * direction of the drone-owner vector, ensuring safe altitude.
-     * </p>
-     *
-     * @param owner the owner entity to offset from
-     * @param distance the desired distance from owner (blocks)
-     * @return safe position vector at owner's eye level
+     * Computes a safe offset position relative to the owner.
      */
     public Vec3 getSafetyTarget(Player owner, double distance) {
-        Vec3 directionVector = drone.position().subtract(owner.position());
-        if (directionVector.lengthSqr() < 0.01) {
-            directionVector = new Vec3(1, 0, 0);
+        Vec3 direction = drone.position().subtract(owner.position());
+        if (direction.lengthSqr() < 0.01) {
+            direction = new Vec3(1, 0, 0);
         }
-        directionVector = directionVector.normalize();
 
-        Vec3 safetyPoint = owner.position().add(directionVector.scale(distance));
-        return calculateIdealPosition(safetyPoint.x, owner.getEyeY(), safetyPoint.z);
+        direction = direction.normalize();
+        Vec3 point = owner.position().add(direction.scale(distance));
+
+        return calculateIdealPosition(point.x, owner.getEyeY(), point.z);
     }
 
     /**
-     * Calculates an ideal hover position ensuring minimum altitude above ground.
-     * <p>
-     * If the desired Y coordinate is too close to the ground (within
-     * {@value MIN_ALTITUDE_OFFSET} blocks), it is raised to maintain safe clearance.
-     * </p>
-     *
-     * @param x the desired X coordinate
-     * @param y the desired Y coordinate
-     * @param z the desired Z coordinate
-     * @return position vector with safe altitude
+     * Ensures a minimum vertical clearance above ground.
      */
     public Vec3 calculateIdealPosition(double x, double y, double z) {
         double floorY = getFloorY(x, y, z);
@@ -201,14 +148,6 @@ public class DroneAiLogic {
         return new Vec3(x, y, z);
     }
 
-    /**
-     * Finds the Y coordinate of the ground below a position using raycasting.
-     *
-     * @param x the X coordinate
-     * @param y the starting Y coordinate for the raycast
-     * @param z the Z coordinate
-     * @return the Y coordinate of the first solid block below, or world minimum if none found
-     */
     private double getFloorY(double x, double y, double z) {
         Vec3 start = new Vec3(x, y, z);
         Vec3 end = new Vec3(x, drone.level().getMinBuildHeight() - 1.0, z);
@@ -226,16 +165,10 @@ public class DroneAiLogic {
         return drone.level().getMinBuildHeight();
     }
 
-    // ============================================================================================
-    // ACCESSIBILITY & INTERACTION
-    // ============================================================================================
+    /* ------------------------------------------------------------ */
+    /* Accessibility                                                */
+    /* ------------------------------------------------------------ */
 
-    /**
-     * Checks if a block is within interaction range and has clear line of sight.
-     *
-     * @param pos the block position to check
-     * @return {@code true} if the drone can interact with the block
-     */
     public boolean isInRangeToInteract(BlockPos pos) {
         Vec3 center = Vec3.atCenterOf(pos);
         if (drone.distanceToSqr(center) > INTERACT_RANGE_SQR) {
@@ -243,7 +176,8 @@ public class DroneAiLogic {
         }
 
         BlockHitResult result = drone.level().clip(new ClipContext(
-                drone.getEyePosition(), center,
+                drone.getEyePosition(),
+                center,
                 ClipContext.Block.COLLIDER,
                 ClipContext.Fluid.NONE,
                 drone
@@ -255,43 +189,34 @@ public class DroneAiLogic {
     }
 
     /**
-     * Determines if a block position is accessible to the drone.
+     * Determines whether a block can be reached by the drone.
      * <p>
-     * Uses a time-based cache to reduce expensive pathfinding calculations.
-     * Adjacent blocks (Manhattan distance ≤ 1) are always considered accessible.
-     * </p>
-     *
-     * @param pos the block position to check
-     * @return {@code true} if the drone can reach the position
+     * Uses a time-based cache to avoid repeated pathfinding queries.
      */
     public boolean isBlockAccessible(BlockPos pos) {
         if (drone.blockPosition().distManhattan(pos) <= 1) {
             return true;
         }
 
-        long currentTick = drone.level().getGameTime();
+        long tick = drone.level().getGameTime();
         CachedReachability cached = accessibilityCache.get(pos);
 
-        if (cached != null && currentTick < cached.expiryTick) {
+        if (cached != null && tick < cached.expiryTick) {
             return cached.reachable;
         }
 
         boolean reachable = performAccessibilityCheck(pos);
-
         accessibilityCache.remove(pos);
+
         return reachable;
     }
 
-    /**
-     * Performs the actual accessibility check using raycasting and pathfinding.
-     *
-     * @param pos the position to check
-     * @return {@code true} if accessible
-     */
     private boolean performAccessibilityCheck(BlockPos pos) {
         Vec3 center = Vec3.atCenterOf(pos);
+
         BlockHitResult result = drone.level().clip(new ClipContext(
-                drone.blockPosition().getCenter(), center,
+                drone.blockPosition().getCenter(),
+                center,
                 ClipContext.Block.COLLIDER,
                 ClipContext.Fluid.NONE,
                 drone
@@ -305,24 +230,14 @@ public class DroneAiLogic {
         return path != null && path.canReach();
     }
 
-    // ============================================================================================
-    // MINING LOGIC
-    // ============================================================================================
+    /* ------------------------------------------------------------ */
+    /* Mining                                                       */
+    /* ------------------------------------------------------------ */
 
     /**
-     * Progressively mines a block, applying tool speed and Haste effects.
-     * <p>
-     * The mining system supports:
-     * <ul>
-     *   <li>Automatic tool selection (pickaxe, axe, shovel, hoe)</li>
-     *   <li>Haste effect amplification from beacons</li>
-     *   <li>Block drop collection into drone inventory</li>
-     *   <li>Visual progress updates and mining sounds</li>
-     * </ul>
-     * </p>
+     * Mines a block progressively, applying tool efficiency and Haste effects.
      *
-     * @param pos the position of the block to mine
-     * @return {@code true} if the block was completely mined this tick
+     * @return {@code true} if the block was fully mined this tick
      */
     public boolean mineBlock(BlockPos pos) {
         Level level = drone.level();
@@ -350,12 +265,9 @@ public class DroneAiLogic {
         return false;
     }
 
-    /**
-     * Updates the mining calculation cache when the target or buffs change.
-     */
     private void updateMiningCacheIfNeeded(BlockPos pos, BlockState state) {
-        int currentHaste = getHasteAmplifier();
-        boolean buffsChanged = (currentHaste != this.lastHasteAmplifier);
+        int haste = getHasteAmplifier();
+        boolean buffsChanged = haste != lastHasteAmplifier;
         boolean targetChanged = currentMiningPos == null
                 || !currentMiningPos.equals(pos)
                 || !state.is(currentMiningState.getBlock());
@@ -367,15 +279,12 @@ public class DroneAiLogic {
 
             currentMiningPos = pos;
             currentMiningState = state;
-            lastHasteAmplifier = currentHaste;
+            lastHasteAmplifier = haste;
 
-            recalculateMiningSpeed(state, currentHaste);
+            recalculateMiningSpeed(state, haste);
         }
     }
 
-    /**
-     * Recalculates mining speed based on tool and buffs.
-     */
     private void recalculateMiningSpeed(BlockState state, int hasteAmplifier) {
         cachedBestTool = getBestTool(state);
         cachedBlockHardness = state.getDestroySpeed(drone.level(), currentMiningPos);
@@ -384,40 +293,33 @@ public class DroneAiLogic {
         if (hasteAmplifier >= 0) {
             cachedToolSpeed *= 1.0F + (hasteAmplifier + 1) * 0.2F;
         }
-        if (cachedToolSpeed < 1.0f) {
-            cachedToolSpeed = 1.0f;
+
+        if (cachedToolSpeed < 1.0F) {
+            cachedToolSpeed = 1.0F;
         }
     }
 
-    /**
-     * Updates visual mining progress on the client.
-     */
     private void updateMiningVisuals(Level level, BlockPos pos, float damage) {
-        int progressInt = (int) (currentDestroyProgress * 10.0F);
-        int prevProgressInt = (int) ((currentDestroyProgress - damage) * 10.0F);
+        int progress = (int) (currentDestroyProgress * 10.0F);
+        int previous = (int) ((currentDestroyProgress - damage) * 10.0F);
 
-        if (progressInt != prevProgressInt) {
-            level.destroyBlockProgress(drone.getId(), pos, progressInt);
+        if (progress != previous) {
+            level.destroyBlockProgress(drone.getId(), pos, progress);
         }
     }
 
-    /**
-     * Plays mining sounds periodically.
-     */
+    // Throttled mining hit sounds
     private void playMiningSounds(Level level, BlockPos pos, BlockState state) {
         if (miningSoundCooldown++ % 4 == 0) {
-            var soundType = state.getSoundType(level, pos, drone);
-            level.playSound(null, pos, soundType.getHitSound(), SoundSource.BLOCKS,
-                    (soundType.getVolume() + 1.0F) / 8.0F, soundType.getPitch() * 0.5F);
+            var sound = state.getSoundType(level, pos, drone);
+            level.playSound(null, pos, sound.getHitSound(),
+                    SoundSource.BLOCKS,
+                    (sound.getVolume() + 1.0F) / 8.0F,
+                    sound.getPitch() * 0.5F
+            );
         }
     }
 
-    /**
-     * Gets the current Haste effect amplifier.
-     *
-     * @return amplifier level, or -1 if no Haste effect active
-     */
-    @SuppressWarnings("DataFlowIssue")
     private int getHasteAmplifier() {
         if (drone.hasEffect(MobEffects.DIG_SPEED)) {
             return drone.getEffect(MobEffects.DIG_SPEED).getAmplifier();
@@ -425,33 +327,24 @@ public class DroneAiLogic {
         return -1;
     }
 
-    /**
-     * Resets all mining state and clears visual progress.
-     */
     public void resetMiningState() {
         if (currentMiningPos != null) {
             drone.level().destroyBlockProgress(drone.getId(), currentMiningPos, -1);
         }
-        this.currentDestroyProgress = 0.0F;
-        this.miningSoundCooldown = 0;
-        this.currentMiningPos = null;
-        this.currentMiningState = null;
+        currentDestroyProgress = 0.0F;
+        miningSoundCooldown = 0;
+        currentMiningPos = null;
+        currentMiningState = null;
     }
 
-    /**
-     * Breaks a block and collects drops into the drone's inventory.
-     * <p>
-     * Drops that don't fit in the inventory are spawned in the world.
-     * </p>
-     */
     private void breakAndDrop(Level level, BlockPos pos, BlockState state, ItemStack tool) {
         if (level instanceof ServerLevel serverLevel) {
-            LootParams.Builder lootParams = new LootParams.Builder(serverLevel)
+            LootParams.Builder params = new LootParams.Builder(serverLevel)
                     .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
                     .withParameter(LootContextParams.TOOL, tool)
                     .withOptionalParameter(LootContextParams.THIS_ENTITY, drone);
 
-            List<ItemStack> drops = state.getDrops(lootParams);
+            List<ItemStack> drops = state.getDrops(params);
             for (ItemStack drop : drops) {
                 ItemStack remaining = itemStore(drop);
                 if (!remaining.isEmpty()) {
@@ -464,16 +357,6 @@ public class DroneAiLogic {
         }
     }
 
-    /**
-     * Selects the most effective tool for mining a block.
-     * <p>
-     * Compares iron-tier tools (pickaxe, axe, shovel, hoe) and returns
-     * the one with the highest destroy speed for the given block state.
-     * </p>
-     *
-     * @param state the block state to mine
-     * @return the most effective tool
-     */
     private ItemStack getBestTool(BlockState state) {
         ItemStack pick = Items.IRON_PICKAXE.getDefaultInstance();
         ItemStack axe = Items.IRON_AXE.getDefaultInstance();
@@ -491,56 +374,36 @@ public class DroneAiLogic {
         return hoe;
     }
 
-    // ============================================================================================
-    // INVENTORY MANAGEMENT & HELPERS
-    // ============================================================================================
+    /* ------------------------------------------------------------ */
+    /* Inventory                                                    */
+    /* ------------------------------------------------------------ */
 
-    /**
-     * Checks if the drone's inventory has space for an item stack.
-     *
-     * @param item the item to check
-     * @return {@code true} if the item can fit (fully or partially)
-     */
     public boolean hasInventorySpaceFor(ItemStack item) {
         if (item.isEmpty()) return true;
         ItemStack remainder = ItemHandlerHelper.insertItemStacked(
-                drone.getInventory(), item.copy(), true);
+                drone.getInventory(), item.copy(), true
+        );
         return remainder.getCount() < item.getCount();
     }
 
-    /**
-     * Checks if the drone has any available inventory space.
-     *
-     * @return {@code true} if there is at least one empty or non-full slot
-     */
     public boolean hasAnyInventorySpace() {
-        var inventory = this.drone.getInventory();
+        var inventory = drone.getInventory();
 
-        for (int slot = 0; slot < inventory.getSlots(); slot++) {
-            ItemStack stackInSlot = inventory.getStackInSlot(slot);
-
-            if (stackInSlot.isEmpty() || stackInSlot.getCount() < stackInSlot.getMaxStackSize()) {
+        for (int i = 0; i < inventory.getSlots(); i++) {
+            ItemStack stack = inventory.getStackInSlot(i);
+            if (stack.isEmpty() || stack.getCount() < stack.getMaxStackSize()) {
                 return true;
             }
         }
         return false;
     }
 
-    /**
-     * Finds a slot containing a block suitable for removing fluids.
-     * <p>
-     * Searches for a {@link BlockItem} that produces a full collision block,
-     * suitable for filling water/lava source blocks.
-     * </p>
-     *
-     * @return slot index, or -1 if no suitable block found
-     */
     public int findSlotWithFluidRemoverBlock() {
         for (int i = 0; i < drone.getInventory().getSlots(); i++) {
             ItemStack stack = drone.getInventory().getStackInSlot(i);
             if (!stack.isEmpty() && stack.getItem() instanceof BlockItem bi) {
-                BlockState defaultState = bi.getBlock().defaultBlockState();
-                if (defaultState.isCollisionShapeFullBlock(drone.level(), drone.blockPosition())) {
+                BlockState state = bi.getBlock().defaultBlockState();
+                if (state.isCollisionShapeFullBlock(drone.level(), drone.blockPosition())) {
                     return i;
                 }
             }
@@ -548,52 +411,34 @@ public class DroneAiLogic {
         return -1;
     }
 
-    /**
-     * Stores an item in the drone's inventory.
-     *
-     * @param item the item to store
-     * @return remaining items that didn't fit
-     */
     public ItemStack itemStore(ItemStack item) {
         return ItemHandlerHelper.insertItemStacked(drone.getInventory(), item, false);
     }
 
-    /**
-     * Picks up all nearby item entities within range.
-     *
-     * @return {@code true} if any items were picked up
-     */
     public boolean itemPickUp() {
-        AABB pickupArea = drone.getBoundingBox().inflate(1.0, 0.5, 1.0);
-        List<ItemEntity> items = drone.level().getEntitiesOfClass(ItemEntity.class, pickupArea);
-        boolean pickedSomething = false;
+        AABB area = drone.getBoundingBox().inflate(1.0, 0.5, 1.0);
+        List<ItemEntity> items = drone.level().getEntitiesOfClass(ItemEntity.class, area);
+        boolean picked = false;
 
-        for (ItemEntity itemEntity : items) {
-            if (itemEntity.isAlive() && !itemEntity.getItem().isEmpty()) {
-                ItemStack stack = itemEntity.getItem();
-                ItemStack remainder = itemStore(stack);
+        for (ItemEntity entity : items) {
+            if (!entity.isAlive() || entity.getItem().isEmpty()) continue;
 
-                if (remainder.isEmpty()) {
-                    itemEntity.discard();
-                    pickedSomething = true;
-                } else {
-                    itemEntity.setItem(remainder);
-                    if (remainder.getCount() < stack.getCount()) {
-                        pickedSomething = true;
-                    }
+            ItemStack stack = entity.getItem();
+            ItemStack remainder = itemStore(stack);
+
+            if (remainder.isEmpty()) {
+                entity.discard();
+                picked = true;
+            } else {
+                entity.setItem(remainder);
+                if (remainder.getCount() < stack.getCount()) {
+                    picked = true;
                 }
             }
         }
-        return pickedSomething;
+        return picked;
     }
 
-    /**
-     * Attempts to place a block at the specified position.
-     *
-     * @param pos the position to place the block
-     * @param stack the item stack containing the block
-     * @return {@code true} if placement was successful
-     */
     public boolean placeBlock(BlockPos pos, ItemStack stack) {
         if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) {
             return false;
@@ -609,16 +454,9 @@ public class DroneAiLogic {
                 new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false)
         );
 
-        InteractionResult result = blockItem.place(context);
-        return result.consumesAction();
+        return blockItem.place(context).consumesAction();
     }
 
-    /**
-     * Finds the first obstructing block between the drone and a target.
-     *
-     * @param targetPos the target position to raycast towards
-     * @return position of the blocking block, or null if path is clear
-     */
     public BlockPos getObstructionBlock(BlockPos targetPos) {
         Vec3 start = drone.getEyePosition();
         Vec3 end = Vec3.atCenterOf(targetPos);
@@ -634,60 +472,31 @@ public class DroneAiLogic {
                 drone
         ));
 
-        if (result.getType() == HitResult.Type.BLOCK) {
-            BlockPos hitPos = result.getBlockPos();
-            if (!hitPos.equals(targetPos)) {
-                return hitPos;
-            }
+        if (result.getType() == HitResult.Type.BLOCK && !result.getBlockPos().equals(targetPos)) {
+            return result.getBlockPos();
         }
+
         return null;
     }
 
     /**
-     * Validates if a block is a viable mining target.
-     * <p>
-     * A block is valid if it:
-     * <ul>
-     *   <li>Is not air</li>
-     *   <li>Is not a fluid (unless waterlogged)</li>
-     *   <li>Has non-negative hardness (destructible)</li>
-     *   <li>Is not reinforced deepslate</li>
-     * </ul>
-     * </p>
-     *
-     * @param pos the block position to validate
-     * @return {@code true} if the block can be mined
+     * Validates whether a block can be mined by the drone.
      */
-    @SuppressWarnings("RedundantIfStatement")
     public boolean isValidMiningTarget(BlockPos pos) {
         BlockState state = drone.level().getBlockState(pos);
 
-        if (state.isAir()) {
-            return false;
-        }
+        if (state.isAir()) return false;
 
         if (!state.getFluidState().isEmpty()
                 && !state.hasProperty(BlockStateProperties.WATERLOGGED)) {
             return false;
         }
 
-        float hardness = state.getDestroySpeed(drone.level(), pos);
-        if (hardness < 0) {
-            return false;
-        }
+        if (state.getDestroySpeed(drone.level(), pos) < 0) return false;
 
-        if (state.is(net.minecraft.world.level.block.Blocks.REINFORCED_DEEPSLATE)) {
-            return false;
-        }
-
-        return true;
+        return !state.is(net.minecraft.world.level.block.Blocks.REINFORCED_DEEPSLATE);
     }
 
-    /**
-     * Checks if the drone is currently inside a suffocating block.
-     *
-     * @return position of the suffocating block, or null if safe
-     */
     public BlockPos getSuffocatingBlock() {
         BlockPos pos = drone.blockPosition();
         BlockState state = drone.level().getBlockState(pos);
