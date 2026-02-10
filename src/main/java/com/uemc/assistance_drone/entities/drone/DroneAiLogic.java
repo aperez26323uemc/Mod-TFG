@@ -17,6 +17,7 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -38,9 +39,6 @@ public class DroneAiLogic {
     // --- CONFIGURATION CONSTANTS ---
     private static final double MOVEMENT_THRESHOLD_SQR = 1.2;
     private static final double INTERACT_RANGE_SQR = 4.0;
-
-    // --- CACHE CONFIGURATION ---
-    private static final long PATH_CACHE_TTL = 20L;
 
     private final DroneEntity drone;
 
@@ -164,7 +162,6 @@ public class DroneAiLogic {
             reachable = (path != null && path.canReach());
         }
 
-        accessibilityCache.put(pos, new CachedReachability(currentTick + PATH_CACHE_TTL, reachable));
         return reachable;
     }
 
@@ -249,8 +246,6 @@ public class DroneAiLogic {
         this.currentMiningState = null;
     }
 
-    // ELIMINADO: applyMiningSpeedBuffs(...) - Delegado al Mixin
-
     // ============================================================================================
     // INVENTORY MANAGEMENT & HELPERS
     // ============================================================================================
@@ -259,6 +254,25 @@ public class DroneAiLogic {
         if (item.isEmpty()) return true;
         ItemStack remainder = ItemHandlerHelper.insertItemStacked(drone.getInventory(), item.copy(), true);
         return remainder.getCount() < item.getCount();
+    }
+
+    public boolean hasAnyInventorySpace() {
+        var inventory = this.drone.getInventory(); // o como lo accedas
+
+        for (int slot = 0; slot < inventory.getSlots(); slot++) {
+            ItemStack stackInSlot = inventory.getStackInSlot(slot);
+
+            // Slot vacío → espacio seguro
+            if (stackInSlot.isEmpty()) {
+                return true;
+            }
+
+            // Slot con items pero no lleno
+            if (stackInSlot.getCount() < stackInSlot.getMaxStackSize()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public int findSlotWithFluidRemoverBlock() {
@@ -294,7 +308,7 @@ public class DroneAiLogic {
                 } else {
                     itemEntity.setItem(remainder);
                     if (remainder.getCount() == stack.getCount()) {
-                        return pickedSomething;
+                        pickedSomething = true;
                     }
                 }
             }
@@ -330,6 +344,36 @@ public class DroneAiLogic {
             if (!hitPos.equals(targetPos)) {
                 return hitPos;
             }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("RedundantIfStatement")
+    public boolean isValidMiningTarget(BlockPos pos) {
+        BlockState state = drone.level().getBlockState(pos);
+
+        // 1. Descartar Aire
+        if (state.isAir()) return false;
+
+        // 2. Descartar Fluidos (CRÍTICO: El agua tiene dureza 100.0f)
+        // Usamos !isEmpty() para detectar cualquier fluido (agua, lava, modded)
+        if (!state.getFluidState().isEmpty() && !state.hasProperty(BlockStateProperties.WATERLOGGED)) {
+            return false;
+        }
+
+        // 3. Descartar Indestructibles (Bedrock, Barreras, Portales del End -> Dureza -1.0)
+        float hardness = state.getDestroySpeed(drone.level(), pos);
+        if (hardness < 0) return false;
+        if (state.is(net.minecraft.world.level.block.Blocks.REINFORCED_DEEPSLATE)) return false;
+
+        return true;
+    }
+
+    public BlockPos getSuffocatingBlock() {
+        BlockPos pos = drone.blockPosition();
+        BlockState state = drone.level().getBlockState(pos);
+        if (!state.isAir() && state.isSuffocating(drone.level(), pos)) {
+            return pos;
         }
         return null;
     }

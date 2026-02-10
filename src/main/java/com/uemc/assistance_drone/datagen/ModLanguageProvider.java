@@ -30,17 +30,17 @@ public class ModLanguageProvider extends LanguageProvider {
 
         // --- INTERFAZ (GUI) ---
         // Claves personalizadas que usar en los menús
-        add(ModKeys.GUI_DRONE_MENU_TITLE, "Drone");
         add(ModKeys.GUI_DRONE_MENU_MODES_LABEL, "Modes");
         add(ModKeys.GUI_DRONE_MENU_STORAGE_LABEL, "Storage");
 
         // Site Planner Translations
         add(ModKeys.GUI_SITE_PLANNER_START_SET, "Start position set!");
-        add(ModKeys.GUI_SITE_PLANNER_NEW_START_SET, "New Start position set!");
         add(ModKeys.GUI_SITE_PLANNER_END_SET, "End position set! Volume: %s blocks");
         add(ModKeys.GUI_SITE_PLANNER_CLEARED, "Selection cleared!");
-        add(ModKeys.GUI_SITE_PLANNER_CANCELLED, "Selection cancelled (Item changed).");
-        add(ModKeys.GUI_SITE_PLANNER_ERROR_VOLUME, "§cError: Volume is too small (%s blocks). Minimum is 8.");
+        add(ModKeys.GUI_SITE_PLANNER_ERROR_VOLUME_SMALL,
+                "Too small! Minimum volume is %s. Your selection is %s");
+        add(ModKeys.GUI_SITE_PLANNER_ERROR_MAX_SIZE,
+                "Too big! No side can be larger than %s blocks. Your selection: %s×%s×%s");
         add(ModKeys.GUI_SITE_PLANNER_SLOT_HINT, "Place configured Site Planner here");
 
         // Tooltips

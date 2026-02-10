@@ -1,4 +1,4 @@
-package com.uemc.assistance_drone.events;
+package com.uemc.assistance_drone.events.client;
 
 import com.uemc.assistance_drone.AssistanceDrone;
 import com.uemc.assistance_drone.entities.ModEntities;
@@ -6,6 +6,7 @@ import com.uemc.assistance_drone.entities.client.DroneEntityModel;
 import com.uemc.assistance_drone.entities.client.DroneEntityRenderer;
 import com.uemc.assistance_drone.menus.ModMenus;
 import com.uemc.assistance_drone.menus.client.DroneMenuScreen;
+import com.uemc.assistance_drone.util.ModKeys;
 import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -17,7 +18,7 @@ import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
 
 @EventBusSubscriber(modid = AssistanceDrone.MODID, value = Dist.CLIENT)
-public class ModClientEvents {
+public class RenderEvents {
 
     @SubscribeEvent
     public static void onRegisterLayers(EntityRenderersEvent.RegisterLayerDefinitions event) {
@@ -35,9 +36,9 @@ public class ModClientEvents {
     @SubscribeEvent
     public static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
         event.register(ModelResourceLocation.standalone(
-                ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "block/bottom_marker")));
+                ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, ModKeys.SITE_PLANNER_START_MARKER_MODEL_PATH)));
 
         event.register(ModelResourceLocation.standalone(
-                ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, "block/top_marker")));
+                ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, ModKeys.SITE_PLANNER_END_MARKER_MODEL_PATH)));
     }
 }

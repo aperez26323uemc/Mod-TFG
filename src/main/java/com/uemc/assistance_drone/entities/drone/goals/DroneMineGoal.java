@@ -6,13 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.EnumSet;
 import java.util.LinkedList;
@@ -23,14 +17,13 @@ public class DroneMineGoal extends Goal {
 
     private final DroneEntity drone;
     private final Predicate<String> activationCondition;
-    private static final Logger LOGGER = LoggerFactory.getLogger(DroneMineGoal.class);
 
+    // State
     private int checkCooldown = 0;
     private BlockPos currentJobTarget = null;
-
-    // NUEVO: Variable para guardar el obstáculo temporal
     private BlockPos obstacleTarget = null;
 
+    // Navigation / Strategy
     private final Queue<BlockPos> waypoints = new LinkedList<>();
     private final SpiralLayerIterator layerIterator;
 
@@ -44,22 +37,24 @@ public class DroneMineGoal extends Goal {
     @Override
     public boolean canUse() {
         if (!activationCondition.test(drone.getState())) return false;
+
         ItemStack planner = drone.getInventory().getStackInSlot(0);
         if (!SitePlanner.isConfigured(planner)) return false;
+
         if (this.checkCooldown-- > 0) return false;
 
-        if (hasMiningTargets(drone.level(), planner)) {
-            this.checkCooldown = 20;
+        // Optimizamos el cooldown dependiendo de si encontramos trabajo o no
+        if (hasMiningTargets(planner)) {
+            this.checkCooldown = 20; // Re-check normal
             return true;
         } else {
-            this.checkCooldown = 40;
+            this.checkCooldown = 60; // Relax si no hay nada (ahorra CPU)
             return false;
         }
     }
 
     @Override
     public boolean canContinueToUse() {
-        // Continuamos si hay un obstáculo, un trabajo actual, o quedan bloques en el iterador
         return activationCondition.test(drone.getState())
                 && (this.obstacleTarget != null || this.currentJobTarget != null || !this.layerIterator.isFinished());
     }
@@ -67,7 +62,7 @@ public class DroneMineGoal extends Goal {
     @Override
     public void start() {
         this.currentJobTarget = null;
-        this.obstacleTarget = null; // Resetear obstáculo
+        this.obstacleTarget = null;
         this.waypoints.clear();
 
         ItemStack planner = drone.getInventory().getStackInSlot(0);
@@ -87,14 +82,14 @@ public class DroneMineGoal extends Goal {
         this.drone.getLogic().resetMiningState();
         this.drone.getNavigation().stop();
 
+        // Flotar de forma segura al terminar
         Vec3 current = drone.getLogic().calculateIdealPosition(drone.getX(), drone.getY(), drone.getZ());
         drone.getLogic().executeMovement(current);
     }
 
     @Override
     public boolean isInterruptable() {
-        // No interrumpir si estamos minando algo (sea trabajo u obstáculo)
-        return this.currentJobTarget == null && this.obstacleTarget == null;
+        return true;
     }
 
     @Override
@@ -102,75 +97,62 @@ public class DroneMineGoal extends Goal {
         Level level = this.drone.level();
         if (level.isClientSide) return;
 
-        BlockPos suffocating = getSuffocatingBlock();
+        // La lógica de aplicar buffs ahora es automática vía Mixin, aquí no hacemos nada.
 
-        // 1. DETERMINAR EL OBJETIVO ACTIVO
-        // Prioridad: Si hay un obstáculo bloqueando el camino, ese es el objetivo ahora.
-        obstacleTarget = (suffocating != null) ? suffocating : obstacleTarget;
+        // 1. SEGURIDAD: ¿Nos estamos asfixiando? (Prioridad Absoluta)
+        BlockPos suffocating = drone.getLogic().getSuffocatingBlock(); // DELEGADO A LOGIC
+        if (suffocating != null) {
+            obstacleTarget = suffocating;
+        }
+
+        // 2. DETERMINAR TARGET ACTIVO
         BlockPos activeTarget = (obstacleTarget != null) ? obstacleTarget : currentJobTarget;
 
-        // Si no tenemos ni obstáculo ni trabajo, pedimos uno al iterador
+        // Si no hay target, pedimos el siguiente al iterador
         if (activeTarget == null) {
-            BlockPos next = this.layerIterator.next(level);
-            if (next == null) return;
+            BlockPos next = this.layerIterator.next();
+            if (next == null) return; // Trabajo terminado o nada encontrado
 
             this.currentJobTarget = next;
             activeTarget = next;
             this.waypoints.clear();
         }
 
-        // LOGGER.debug("Target: {} (Is Obstacle: {})", activeTarget, (activeTarget == obstacleTarget));
-
-        // 2. LÓGICA DE INTERACCIÓN (Común para obstáculo y trabajo)
+        // 3. EJECUTAR ACCIÓN
         Vec3 targetVec = Vec3.atCenterOf(activeTarget);
         drone.getLookControl().setLookAt(targetVec);
 
-        boolean inRange = drone.getLogic().isInRangeToInteract(activeTarget);
-
-        if (inRange) {
+        if (drone.getLogic().isInRangeToInteract(activeTarget)) {
+            // FASE DE MINADO
             drone.getNavigation().stop();
             boolean blockBroken = drone.getLogic().mineBlock(activeTarget);
 
             if (blockBroken) {
-                // GESTIÓN DE FINALIZACIÓN
                 if (obstacleTarget != null) {
-                    // Si rompimos el obstáculo, lo limpiamos y el tick siguiente retomará el currentJobTarget
-                    LOGGER.info("Obstacle cleared at {}", obstacleTarget);
                     obstacleTarget = null;
                 } else {
-                    // Si rompimos el trabajo oficial
                     currentJobTarget = null;
                 }
             }
         } else {
+            // FASE DE APROXIMACIÓN
             drone.getLogic().resetMiningState();
-            // Solo navegamos hacia el currentJobTarget si no hay obstáculo.
-            // Si hay obstáculo y no estamos en rango, intentamos acercarnos a él.
             processNavigation(activeTarget);
         }
     }
 
-    public @Nullable BlockPos getSuffocatingBlock() {
-        BlockPos pos = this.drone.blockPosition();
-        BlockState state = this.drone.level().getBlockState(pos);
-
-        if (!state.isAir() && state.isSuffocating(this.drone.level(), pos)) {
-            return pos;
-        }
-        return null;
-    }
-
-    // --- NAVEGACIÓN LOCAL ---
+    // --- NAVEGACIÓN ESTRATÉGICA ---
 
     private void processNavigation(BlockPos target) {
-        // Si estamos persiguiendo un obstáculo, vamos directo a él
+        // A los obstáculos (emergencia) vamos directo
         if (target.equals(obstacleTarget)) {
             drone.getLogic().executeMovement(Vec3.atCenterOf(target));
             return;
         }
 
+        // Generar waypoints si no hay (navegación tipo "Manhattan" por esquinas)
         if (waypoints.isEmpty()) {
-            if (canReach(target)) {
+            if (drone.getLogic().isBlockAccessible(target)) {
                 drone.getLogic().executeMovement(Vec3.atCenterOf(target));
             } else {
                 calculateCornerPath(drone.blockPosition(), target);
@@ -178,77 +160,65 @@ public class DroneMineGoal extends Goal {
             return;
         }
 
+        // Seguir waypoints
         BlockPos nextCorner = waypoints.peek();
 
+        // ¿Llegamos al waypoint?
         if (drone.blockPosition().distManhattan(nextCorner) <= 1) {
             waypoints.poll();
             return;
         }
 
-        // --- AQUÍ ESTÁ EL CAMBIO CLAVE ---
-        // Antes de movernos a la esquina, verificamos si hay algo en medio
+        // DETECCIÓN DE OBSTÁCULOS EN RUTA
         BlockPos obstruction = drone.getLogic().getObstructionBlock(nextCorner);
 
         if (obstruction != null) {
-            // Verificamos si el obstáculo es minable (no es bedrock ni aire)
-            BlockState obsState = drone.level().getBlockState(obstruction);
-            if (isValidBlock(obsState, drone.level(), obstruction)) {
-                LOGGER.info("Path blocked by {} at {}. Switching to mine obstruction.", obsState.getBlock().getName().getString(), obstruction);
-                this.obstacleTarget = obstruction; // ¡CAMBIO DE OBJETIVO!
-                return; // Dejamos de movernos y en el siguiente tick el dron atacará el obstáculo
+            // Si hay obstrucción, preguntamos a la lógica si vale la pena minarla
+            if (drone.getLogic().isValidMiningTarget(obstruction)) {
+                this.obstacleTarget = obstruction;
+                return;
             }
         }
 
-        // Si no hay obstáculo, nos movemos normalmente
+        // Camino libre -> Moverse
         drone.getLogic().executeMovement(Vec3.atCenterOf(nextCorner));
     }
 
-    private boolean canReach(BlockPos target) {
-        return drone.getLogic().isBlockAccessible(target);
-    }
-
+    /**
+     * Calcula una ruta simple en "L" (ejes cartesianos) para evitar atascos simples.
+     * Mantenemos esto aquí porque es una estrategia específica de minería, no de movimiento general.
+     */
     private void calculateCornerPath(BlockPos start, BlockPos end) {
         waypoints.clear();
         int x = start.getX();
         int y = start.getY();
         int z = start.getZ();
 
-        int dx = Math.abs(end.getX() - x);
-        int dz = Math.abs(end.getZ() - z);
-
-        if (dx > 0) {
+        // Prioridad: Eje X -> Eje Z -> Eje Y (para alinearse primero horizontalmente)
+        if (x != end.getX()) {
             x = end.getX();
             waypoints.add(new BlockPos(x, y, z));
         }
-        if (dz > 0) {
+        if (z != end.getZ()) {
             z = end.getZ();
             waypoints.add(new BlockPos(x, y, z));
         }
         if (y != end.getY()) {
-            y = end.getY();
-            waypoints.add(new BlockPos(x, y, z));
+            waypoints.add(new BlockPos(x, end.getY(), z));
         }
 
+        // Asegurar que el destino final está en la lista
         if (waypoints.isEmpty() || !waypoints.contains(end)) {
             waypoints.add(end);
         }
     }
 
-    // --- VALIDACIÓN ---
-
-    public boolean isValidBlock(BlockState state, Level level, BlockPos pos) {
-        boolean isPureFluid = !state.getFluidState().isEmpty() && !state.hasProperty(BlockStateProperties.WATERLOGGED);
-        return !state.isAir() &&
-                state.getDestroySpeed(level, pos) >= 0 && // No irrompible (Bedrock)
-                !state.is(Blocks.BEDROCK) &&
-                !isPureFluid;
-    }
-
-    // ... Métodos de hasMiningTargets y SpiralLayerIterator se mantienen igual ...
-    private boolean hasMiningTargets(Level level, ItemStack planner) {
-        // (Mismo código que proveíste)
+    private boolean hasMiningTargets(ItemStack planner) {
         BlockPos start = SitePlanner.getStartPos(planner);
         BlockPos end = SitePlanner.getEndPos(planner);
+
+        // AABB para iterar
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         int minX = Math.min(start.getX(), end.getX());
         int maxX = Math.max(start.getX(), end.getX());
         int minY = Math.min(start.getY(), end.getY());
@@ -256,13 +226,13 @@ public class DroneMineGoal extends Goal {
         int minZ = Math.min(start.getZ(), end.getZ());
         int maxZ = Math.max(start.getZ(), end.getZ());
 
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        // Escaneo rápido de arriba a abajo
         for (int y = maxY; y >= minY; y--) {
             for (int x = minX; x <= maxX; x++) {
                 for (int z = minZ; z <= maxZ; z++) {
                     cursor.set(x, y, z);
-                    BlockState state = level.getBlockState(cursor);
-                    if (isValidBlock(state, level, cursor)) {
+                    // Usamos la validación centralizada
+                    if (drone.getLogic().isValidMiningTarget(cursor)) {
                         return true;
                     }
                 }
@@ -271,8 +241,8 @@ public class DroneMineGoal extends Goal {
         return false;
     }
 
+    // --- ITERADOR (Limpio, usa Logic para validar) ---
     private static class SpiralLayerIterator {
-        // (Mismo código que proveíste, sin cambios necesarios)
         private final Queue<BlockPos> queue = new LinkedList<>();
         private final DroneMineGoal goal;
         private int currentY, endY, startY;
@@ -294,16 +264,16 @@ public class DroneMineGoal extends Goal {
             generateSpiralForLayer(currentY);
         }
 
-        public BlockPos next(Level level) {
+        public BlockPos next() {
             if (finished) return null;
             while (!queue.isEmpty()) {
                 BlockPos pos = queue.poll();
-                BlockState state = level.getBlockState(pos);
-                if (goal.isValidBlock(state, level, pos)) return pos;
+                // DELEGADO: Usamos la lógica del dron para validar
+                if (goal.drone.getLogic().isValidMiningTarget(pos)) return pos;
             }
-            if (hasBlocksLeftInLayer(level, currentY)) {
+            if (hasBlocksLeftInLayer(currentY)) {
                 generateSpiralForLayer(currentY);
-                if (!queue.isEmpty()) return next(level);
+                if (!queue.isEmpty()) return next();
             }
             if (currentY == endY) {
                 finished = true;
@@ -311,12 +281,12 @@ public class DroneMineGoal extends Goal {
             }
             currentY += (endY > startY) ? 1 : -1;
             generateSpiralForLayer(currentY);
-            return next(level);
+            return next();
         }
 
         public boolean isFinished() { return finished; }
 
-        private boolean hasBlocksLeftInLayer(Level level, int y) {
+        private boolean hasBlocksLeftInLayer(int y) {
             int minX = Math.min(rawStartX, rawEndX);
             int maxX = Math.max(rawStartX, rawEndX);
             int minZ = Math.min(rawStartZ, rawEndZ);
@@ -324,14 +294,14 @@ public class DroneMineGoal extends Goal {
             for (int x = minX; x <= maxX; x++) {
                 for (int z = minZ; z <= maxZ; z++) {
                     BlockPos p = new BlockPos(x, y, z);
-                    BlockState s = level.getBlockState(p);
-                    if (goal.isValidBlock(s, level, p)) return true;
+                    if (goal.drone.getLogic().isValidMiningTarget(p)) return true;
                 }
             }
             return false;
         }
 
         private void generateSpiralForLayer(int y) {
+            // (Tu lógica de espiral original se mantiene intacta aquí)
             queue.clear();
             int currentMinX = Math.min(rawStartX, rawEndX);
             int currentMaxX = Math.max(rawStartX, rawEndX);

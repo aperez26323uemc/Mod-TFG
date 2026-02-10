@@ -19,27 +19,31 @@ public class ModRecipeProvider extends RecipeProvider implements IConditionBuild
     protected void buildRecipes(RecipeOutput output) {
 
         // RECETA DEL DRON
-        // Patrón:
-        // I I I  (Hierro, Hierro, Hierro)
-        // R D R  (Redstone, Diamante, Redstone)
-        // I M I  (Hierro, Motor/Pistón, Hierro)
-
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, ModItems.DRONE_ITEM.get())
-                .pattern("III")
-                .pattern("RDR")
-                .pattern("IPI")
-                .define('I', Items.IRON_INGOT)
+                .pattern("Q Q")
+                .pattern("DCR")
+                .pattern("FIF")
+                .define('Q', Items.QUARTZ)
+                .define('D', Items.DIAMOND)
+                .define('C', Items.COPPER_INGOT)
                 .define('R', Items.REDSTONE)
-                .define('D', Items.DIAMOND_BLOCK)
-                .define('P', Items.PISTON)
-                .unlockedBy("drone", has(Items.IRON_INGOT))
+                .define('F', Items.IRON_INGOT)
+                .define('I', Items.IRON_BLOCK)
+                .unlockedBy("drone", has(Items.QUARTZ))
                 .save(output);
 
         // RECETA DE Planificador de Zona
-        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, ModItems.SITE_PLANNER.get())
-                .requires(Items.PAPER)
-                .requires(Items.BLUE_DYE)
-                .unlockedBy("has_paper", has(Items.PAPER))
+        ShapedRecipeBuilder.shaped(RecipeCategory.MISC, ModItems.SITE_PLANNER.get())
+                .pattern("IID")
+                .pattern("GMC")
+                .pattern("IIR")
+                .define('I', Items.IRON_INGOT)
+                .define('D', Items.DIAMOND)
+                .define('G', Items.GOLD_INGOT)
+                .define('M', Items.MAP)
+                .define('C', Items.COPPER_INGOT)
+                .define('R', Items.REDSTONE)
+                .unlockedBy("site_planner", has(ModItems.DRONE_ITEM))
                 .save(output);
     }
 }

@@ -8,10 +8,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
-import net.neoforged.neoforge.items.wrapper.InvWrapper;
 
 @EventBusSubscriber(modid = AssistanceDrone.MODID)
-public class ModCommonEvents {
+public class DroneCommonEvents {
 
     @SubscribeEvent
     public static void registerAttributes(EntityAttributeCreationEvent event) {

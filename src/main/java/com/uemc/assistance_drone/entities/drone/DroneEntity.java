@@ -29,8 +29,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.items.ItemStackHandler;
@@ -61,7 +60,7 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     public final AnimationState bladeAnimation = new AnimationState();
 
     // --- COMPONENTE LÓGICO ---
-    private final DroneAiLogic aiLogic; // Nuestra caja de herramientas
+    private final DroneAiLogic aiLogic; // Caja de herramientas
 
     private final ItemStackHandler inventory = new ItemStackHandler(13) {
         @Override
@@ -80,6 +79,13 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         this.setPersistenceRequired();
 
         this.moveControl = new DroneMoveControl(this);
+
+        this.setPathfindingMalus(PathType.WATER, 0.5F);
+        this.setPathfindingMalus(PathType.WATER_BORDER, 1.0F);
+        this.setPathfindingMalus(PathType.LAVA, 1.0F);
+        this.setPathfindingMalus(PathType.DANGER_FIRE, 0.5F);
+        this.setPathfindingMalus(PathType.DAMAGE_FIRE, 0.5F);
+
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -100,14 +106,10 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     }
 
     @Override
-    public boolean isPushedByFluid(FluidType type) {
-        return false;
-    }
+    public boolean isPushedByFluid(FluidType type) {return false;}
 
     @Override
-    public void updateFluidHeightAndDoFluidPushing() {
-        return;
-    }
+    public void updateFluidHeightAndDoFluidPushing() {}
 
     @Override
     public void tick() {
