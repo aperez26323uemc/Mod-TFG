@@ -1,4 +1,4 @@
-package com.uemc.assistance_drone.entities.client;
+package com.uemc.assistance_drone.entities.drone.client;
 
 import net.minecraft.client.animation.AnimationChannel;
 import net.minecraft.client.animation.AnimationDefinition;

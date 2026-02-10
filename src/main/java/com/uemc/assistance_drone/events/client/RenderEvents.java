@@ -2,8 +2,8 @@ package com.uemc.assistance_drone.events.client;
 
 import com.uemc.assistance_drone.AssistanceDrone;
 import com.uemc.assistance_drone.entities.ModEntities;
-import com.uemc.assistance_drone.entities.client.DroneEntityModel;
-import com.uemc.assistance_drone.entities.client.DroneEntityRenderer;
+import com.uemc.assistance_drone.entities.drone.client.DroneEntityModel;
+import com.uemc.assistance_drone.entities.drone.client.DroneEntityRenderer;
 import com.uemc.assistance_drone.menus.ModMenus;
 import com.uemc.assistance_drone.menus.client.DroneMenuScreen;
 import com.uemc.assistance_drone.util.ModKeys;

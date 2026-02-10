@@ -1,4 +1,4 @@
-package com.uemc.assistance_drone.entities.client;
+package com.uemc.assistance_drone.entities.drone.client;
 
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import com.uemc.assistance_drone.sounds.ModSounds;

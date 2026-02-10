@@ -1,4 +1,4 @@
-package com.uemc.assistance_drone.entities.client;
+package com.uemc.assistance_drone.entities.drone.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;

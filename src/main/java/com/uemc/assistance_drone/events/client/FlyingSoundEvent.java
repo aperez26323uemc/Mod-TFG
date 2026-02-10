@@ -1,7 +1,7 @@
 package com.uemc.assistance_drone.events.client;
 
 import com.uemc.assistance_drone.AssistanceDrone;
-import com.uemc.assistance_drone.entities.client.DroneFlyingSound;
+import com.uemc.assistance_drone.entities.drone.client.DroneFlyingSound;
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
