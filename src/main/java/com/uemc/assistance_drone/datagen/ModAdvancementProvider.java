@@ -34,7 +34,7 @@ public class ModAdvancementProvider extends AdvancementProvider {
         @Override
         public void generate(HolderLookup.Provider registries, Consumer<AdvancementHolder> saver, ExistingFileHelper existingFileHelper) {
 
-            // --- LOGRO: DRONE HASTE ---
+            // --- Advancement: DRONE HASTE ---
             Advancement.Builder.advancement()
                     .parent(AdvancementSubProvider.createPlaceholder("minecraft:nether/create_beacon")) // Padre externo (Vanilla)
                     .display(
@@ -47,7 +47,7 @@ public class ModAdvancementProvider extends AdvancementProvider {
                             true, // announceToChat
                             true // hidden
                     )
-                    // Añadimos el criterio usando tu Trigger registrado
+                    // Añadimos el criterio usando Trigger registrado
                     .addCriterion("drone_buffed", ModCriteriaTriggers.DRONE_HASTE_MINING.get().createCriterion(
                             new PlayerTrigger.TriggerInstance(Optional.empty()) // Condición vacía {}
                     ))

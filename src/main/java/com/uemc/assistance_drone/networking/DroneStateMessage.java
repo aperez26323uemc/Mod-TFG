@@ -12,40 +12,60 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-// 1. Usamos 'record' para definir los datos automáticamente
-public record DroneStateMessage(int droneId, String state) implements CustomPacketPayload {
+/**
+ * Server-bound packet used to update the state of a drone entity.
+ * <p>
+ * Sent by the client when requesting a state change and validated
+ * server-side to ensure ownership and permissions.
+ */
+public record DroneStateMessage(int droneId, String state)
+        implements CustomPacketPayload {
 
-    // 2. Definimos el TIPO (Identificador único del paquete)
-    public static final Type<DroneStateMessage> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(AssistanceDrone.MODID, ModKeys.STATE_NETWORK_MESSAGE_PATH));
+    /** Unique packet identifier */
+    public static final Type<DroneStateMessage> TYPE =
+            new Type<>(ResourceLocation.fromNamespaceAndPath(
+                    AssistanceDrone.MODID,
+                    ModKeys.STATE_NETWORK_MESSAGE_PATH
+            ));
 
-    // 3. El StreamCodec (Sustituye a encode/decode manuales).
-    // NeoForge serializa automáticamente el int (ID) y el String (Estado).
-    public static final StreamCodec<ByteBuf, DroneStateMessage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.VAR_INT, DroneStateMessage::droneId,
-            ByteBufCodecs.STRING_UTF8, DroneStateMessage::state,
-            DroneStateMessage::new
-    );
+    /**
+     * Codec for serializing the drone entity ID and target state.
+     */
+    public static final StreamCodec<ByteBuf, DroneStateMessage> STREAM_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, DroneStateMessage::droneId,
+                    ByteBufCodecs.STRING_UTF8, DroneStateMessage::state,
+                    DroneStateMessage::new
+            );
 
     @Override
     public Type<DroneStateMessage> type() {
         return TYPE;
     }
 
-    // 4. La lógica de manejo (Qué pasa cuando llega al servidor)
-    public static void handle(final DroneStateMessage message, final IPayloadContext context) {
-        // Encolamos la tarea en el hilo principal del servidor
+    /**
+     * Handles the packet on the server thread.
+     * <p>
+     * The state update is only applied if the sender is the drone owner
+     * or has creative privileges.
+     */
+    public static void handle(
+            final DroneStateMessage message,
+            final IPayloadContext context
+    ) {
         context.enqueueWork(() -> {
-            // Como enviamos al servidor, el sender es el jugador
-            if (context.player() instanceof ServerPlayer player) {
-                Entity entity = player.level().getEntity(message.droneId());
+            if (!(context.player() instanceof ServerPlayer player)) {
+                return;
+            }
 
-                // Verificamos que sea nuestro dron y que el jugador tenga permiso (distancia, dueño, etc.)
-                if (entity instanceof DroneEntity drone) {
-                    // Seguridad extra: ¿Es el dueño? (Opcional, pero recomendado)
-                    if (player.getUUID().equals(drone.getOwnerUUID()) || player.isCreative()) {
-                        drone.setState(message.state());
-                    }
-                }
+            Entity entity = player.level().getEntity(message.droneId());
+            if (!(entity instanceof DroneEntity drone)) {
+                return;
+            }
+
+            if (player.isCreative()
+                    || player.getUUID().equals(drone.getOwnerUUID())) {
+                drone.setState(message.state());
             }
         });
     }

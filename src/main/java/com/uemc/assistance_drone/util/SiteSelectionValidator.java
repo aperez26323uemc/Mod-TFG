@@ -5,30 +5,36 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
 /**
- * Validador centralizado para selecciones de sitio.
- * Evita duplicación de lógica entre SitePlanner y SiteBoxPreviewEvent.
+ * Centralized validator for site selections.
+ * <p>
+ * Provides shared validation logic for both interaction and rendering code,
+ * avoiding duplication across client and server components.
  */
 public class SiteSelectionValidator {
 
-    // Límites de tamaño del site
+    /* ------------------------------------------------------------ */
+    /* Limits                                                       */
+    /* ------------------------------------------------------------ */
+
     public static final int MAX_SIZE = 48;
     public static final int MIN_VOLUME = 8;
 
-    /**
-         * Información de dimensiones de una selección.
-         */
-        public record SelectionDimensions(int dx, int dy, int dz, long volume) {
-    }
+    /* ------------------------------------------------------------ */
+    /* Models                                                       */
+    /* ------------------------------------------------------------ */
 
-    /**
-     * Resultado de validación de dimensiones.
-     */
+    public record SelectionDimensions(int dx, int dy, int dz, long volume) {}
+
     public static class ValidationResult {
         public final boolean valid;
         public final Component errorMessage;
         public final SelectionDimensions dimensions;
 
-        private ValidationResult(boolean valid, Component errorMessage, SelectionDimensions dimensions) {
+        private ValidationResult(
+                boolean valid,
+                Component errorMessage,
+                SelectionDimensions dimensions
+        ) {
             this.valid = valid;
             this.errorMessage = errorMessage;
             this.dimensions = dimensions;
@@ -43,25 +49,23 @@ public class SiteSelectionValidator {
         }
     }
 
-    /**
-     * Calcula las dimensiones entre dos posiciones.
-     */
+    /* ------------------------------------------------------------ */
+    /* Validation                                                   */
+    /* ------------------------------------------------------------ */
+
     public static SelectionDimensions calculateDimensions(BlockPos start, BlockPos end) {
         int dx = Math.abs(start.getX() - end.getX()) + 1;
         int dy = Math.abs(start.getY() - end.getY()) + 1;
         int dz = Math.abs(start.getZ() - end.getZ()) + 1;
         long volume = (long) dx * dy * dz;
+
         return new SelectionDimensions(dx, dy, dz, volume);
     }
 
-    /**
-     * Valida dimensiones y volumen de la selección.
-     */
     public static ValidationResult validateSelection(BlockPos start, BlockPos end) {
         SelectionDimensions dims = calculateDimensions(start, end);
 
-        // Validación 1: Tamaño máximo
-        if (dims.dx > MAX_SIZE || dims.dy > MAX_SIZE || dims.dz > MAX_SIZE) {
+        if (!isValidSize(dims)) {
             return ValidationResult.error(
                     Component.translatable(
                             ModKeys.GUI_SITE_PLANNER_ERROR_MAX_SIZE,
@@ -72,12 +76,12 @@ public class SiteSelectionValidator {
             );
         }
 
-        // Validación 2: Volumen mínimo
-        if (dims.volume < MIN_VOLUME) {
+        if (!isValidVolume(dims)) {
             return ValidationResult.error(
                     Component.translatable(
                             ModKeys.GUI_SITE_PLANNER_ERROR_VOLUME_SMALL,
-                            MIN_VOLUME, dims.volume
+                            MIN_VOLUME,
+                            dims.volume
                     ).withStyle(ChatFormatting.RED),
                     dims
             );
@@ -86,16 +90,16 @@ public class SiteSelectionValidator {
         return ValidationResult.success(dims);
     }
 
-    /**
-     * Verifica si las dimensiones cumplen el tamaño máximo.
-     */
+    /* ------------------------------------------------------------ */
+    /* Helpers                                                      */
+    /* ------------------------------------------------------------ */
+
     public static boolean isValidSize(SelectionDimensions dims) {
-        return dims.dx <= MAX_SIZE && dims.dy <= MAX_SIZE && dims.dz <= MAX_SIZE;
+        return dims.dx <= MAX_SIZE
+                && dims.dy <= MAX_SIZE
+                && dims.dz <= MAX_SIZE;
     }
 
-    /**
-     * Verifica si el volumen cumple el mínimo requerido.
-     */
     public static boolean isValidVolume(SelectionDimensions dims) {
         return dims.volume >= MIN_VOLUME;
     }

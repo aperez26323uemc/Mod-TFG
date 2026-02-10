@@ -18,15 +18,23 @@ import net.minecraft.world.level.block.state.BlockState;
 import javax.annotation.Nullable;
 import java.util.List;
 
+/**
+ * Item used to define a rectangular site selection in the world.
+ * <p>
+ * The selection is defined by a start and end position stored directly
+ * in the item stack data.
+ */
 public class SitePlanner extends Item {
+
     public static final String ID = ModKeys.SITE_PLANNER_ITEM_KEY;
 
     public SitePlanner(Properties properties) {
-        // No stackable
         super(properties.stacksTo(1));
     }
 
-    // --- Getters Públicos ---
+    /* ------------------------------------------------------------ */
+    /* Selection Accessors                                          */
+    /* ------------------------------------------------------------ */
 
     @Nullable
     public static BlockPos getStartPos(ItemStack stack) {
@@ -39,7 +47,7 @@ public class SitePlanner extends Item {
     }
 
     /**
-     * Verifica si el item tiene una configuración válida (Inicio y Fin definidos).
+     * Returns whether the item has a complete and valid selection.
      */
     public static boolean isConfigured(ItemStack stack) {
         return !stack.isEmpty()
@@ -48,27 +56,16 @@ public class SitePlanner extends Item {
                 && getEndPos(stack) != null;
     }
 
-    // --- Interacciones ---
+    /* ------------------------------------------------------------ */
+    /* Interaction                                                  */
+    /* ------------------------------------------------------------ */
 
-    /**
-     * Click Izquierdo: Sin acción
-     */
     @Override
-    public boolean canAttackBlock(BlockState pState, Level pLevel, BlockPos pPos, Player pPlayer) {
-        // Click izquierdo -> nada
+    public boolean canAttackBlock(BlockState state, Level level, BlockPos pos, Player player) {
+        // Left-click does nothing
         return false;
     }
 
-    /**
-     * Click Derecho: Gestiona selección según estado actual
-     * <p>
-     * Controles:
-     * - Click derecho sin selección → empieza selección
-     * - Click derecho con selección a medias → intenta terminar selección
-     * - Click derecho con selección completa → nada
-     * - Shift + Click derecho con selección completa o a medias → limpia selección
-     * - Resto de shift + click → nada
-     */
     @Override
     public InteractionResult useOn(UseOnContext context) {
         Level level = context.getLevel();
@@ -81,10 +78,10 @@ public class SitePlanner extends Item {
 
         BlockPos start = getStartPos(stack);
         BlockPos end = getEndPos(stack);
-        boolean isSneaking = player.isShiftKeyDown();
+        boolean sneaking = player.isShiftKeyDown();
 
-        // Shift + Click derecho con selección completa o a medias → limpia selección
-        if (isSneaking && start != null) {
+        // Sneak + right click clears any existing selection
+        if (sneaking && start != null) {
             clearSelection(stack);
             player.displayClientMessage(
                     Component.translatable(ModKeys.GUI_SITE_PLANNER_CLEARED),
@@ -93,12 +90,11 @@ public class SitePlanner extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // Resto de shift + click → nada
-        if (isSneaking) {
+        if (sneaking) {
             return InteractionResult.PASS;
         }
 
-        // Click derecho sin selección → empieza selección
+        // No start set: define start position
         if (start == null) {
             setStartPos(stack, clickedPos);
             player.displayClientMessage(
@@ -108,74 +104,81 @@ public class SitePlanner extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        // Click derecho con selección a medias → intenta terminar selección
+        // Start set, end missing: attempt to complete selection
         if (end == null) {
             SiteSelectionValidator.ValidationResult validation =
                     SiteSelectionValidator.validateSelection(start, clickedPos);
 
             if (!validation.valid) {
-                // Error de validación
                 player.displayClientMessage(validation.errorMessage, true);
                 return InteractionResult.FAIL;
             }
 
-            // Válido - guardar
             setEndPos(stack, clickedPos);
             player.displayClientMessage(
                     Component.translatable(
-                            ModKeys.GUI_SITE_PLANNER_END_SET, validation.dimensions.volume()
+                            ModKeys.GUI_SITE_PLANNER_END_SET,
+                            validation.dimensions.volume()
                     ),
                     true
             );
             return InteractionResult.SUCCESS;
         }
 
-        // Click derecho con selección completa → nada
+        // Selection already complete
         return InteractionResult.PASS;
     }
 
-    /**
-     * Tooltip Dinámico
-     */
+    /* ------------------------------------------------------------ */
+    /* Tooltip                                                      */
+    /* ------------------------------------------------------------ */
+
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
+    public void appendHoverText(
+            ItemStack stack,
+            TooltipContext context,
+            List<Component> tooltip,
+            TooltipFlag flag
+    ) {
         BlockPos start = getStartPos(stack);
         BlockPos end = getEndPos(stack);
 
         if (start == null) {
-            // No hay selección
-            tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_NO_SELECTION)
+            tooltip.add(Component
+                    .translatable(ModKeys.TOOLTIP_SITE_PLANNER_NO_SELECTION)
                     .withStyle(ChatFormatting.GRAY));
         } else {
-            // Mostrar inicio
-            tooltipComponents.add(Component.translatable(
+            tooltip.add(Component.translatable(
                             ModKeys.TOOLTIP_SITE_PLANNER_START,
                             start.getX(), start.getY(), start.getZ())
                     .withStyle(ChatFormatting.GREEN));
 
             if (end == null) {
-                // Falta el final
-                tooltipComponents.add(Component.translatable(ModKeys.TOOLTIP_SITE_PLANNER_INCOMPLETE)
+                tooltip.add(Component
+                        .translatable(ModKeys.TOOLTIP_SITE_PLANNER_INCOMPLETE)
                         .withStyle(ChatFormatting.YELLOW));
             } else {
-                // Selección completa
-                tooltipComponents.add(Component.translatable(
+                tooltip.add(Component.translatable(
                                 ModKeys.TOOLTIP_SITE_PLANNER_END,
                                 end.getX(), end.getY(), end.getZ())
                         .withStyle(ChatFormatting.AQUA));
 
                 SiteSelectionValidator.SelectionDimensions dims =
                         SiteSelectionValidator.calculateDimensions(start, end);
-                tooltipComponents.add(Component.translatable(
-                                ModKeys.TOOLTIP_SITE_PLANNER_VOLUME, dims.volume())
+
+                tooltip.add(Component.translatable(
+                                ModKeys.TOOLTIP_SITE_PLANNER_VOLUME,
+                                dims.volume())
                         .withStyle(ChatFormatting.GOLD));
             }
         }
 
-        super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
+        super.appendHoverText(stack, context, tooltip, flag);
     }
 
-    // --- Setters Privados ---
+    /* ------------------------------------------------------------ */
+    /* Internal Helpers                                             */
+    /* ------------------------------------------------------------ */
 
     private void setStartPos(ItemStack stack, BlockPos pos) {
         stack.set(SiteMarkersRegister.START_POS, pos);
