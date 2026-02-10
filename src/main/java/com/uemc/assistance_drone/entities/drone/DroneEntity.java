@@ -257,16 +257,12 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     // --- INTERACCIÓN ---
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
-        if (player.isSpectator()) {
-            return InteractionResult.PASS;
-        }
-
         if (!this.level().isClientSide()) {
             // Recoger el dron si:
             // - Shift pulsado
             // - Es el dueño
             // - Inventario vacío
-            if (player.isShiftKeyDown()
+            if (!player.isSpectator() && player.isShiftKeyDown()
                     && player.getUUID().equals(getOwnerUUID())
                     && this.isInventoryEmpty()) {
 
@@ -278,6 +274,7 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
             // Abrir menú
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.openMenu(this, buf -> buf.writeVarInt(this.getId()));
+                return InteractionResult.SUCCESS;
             }
         }
 
