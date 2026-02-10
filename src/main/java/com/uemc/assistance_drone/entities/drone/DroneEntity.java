@@ -105,6 +105,15 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
         return this.inventory;
     }
 
+    public boolean isInventoryEmpty() {
+        for (int i = 0; i < inventory.getSlots(); i++) {
+            if (!inventory.getStackInSlot(i).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public boolean isPushedByFluid(FluidType type) {return false;}
 
@@ -248,16 +257,30 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
     // --- INTERACCIÓN ---
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
+        if (player.isSpectator()) {
+            return InteractionResult.PASS;
+        }
+
         if (!this.level().isClientSide()) {
-            if (player.isShiftKeyDown() && (player.getUUID().equals(getOwnerUUID()))) {
+            // Recoger el dron si:
+            // - Shift pulsado
+            // - Es el dueño
+            // - Inventario vacío
+            if (player.isShiftKeyDown()
+                    && player.getUUID().equals(getOwnerUUID())
+                    && this.isInventoryEmpty()) {
+
                 this.discard();
-                this.spawnAtLocation(new ItemStack(com.uemc.assistance_drone.items.ModItems.DRONE_ITEM.get()));
+                this.spawnAtLocation(new ItemStack(ModItems.DRONE_ITEM.get()));
                 return InteractionResult.SUCCESS;
             }
+
+            // Abrir menú
             if (player instanceof ServerPlayer serverPlayer) {
                 serverPlayer.openMenu(this, buf -> buf.writeVarInt(this.getId()));
             }
         }
+
         return InteractionResult.sidedSuccess(this.level().isClientSide());
     }
 
