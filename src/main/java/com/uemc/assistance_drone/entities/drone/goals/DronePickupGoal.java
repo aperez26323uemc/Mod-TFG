@@ -12,221 +12,242 @@ import java.util.*;
 import java.util.function.Predicate;
 
 /**
- * Goal for automatic item pickup for drones within a configured work area.
+ * Goal responsible for autonomous item pickup within the configured work area.
  * <p>
- * Processes items in batches, maintains a pickup queue sorted by distance,
- * and uses caching strategies to minimize expensive operations like entity queries
- * and inventory space validation.
- * </p>
+ * Maintains a bounded priority queue of nearby item entities sorted by distance.
+ * Uses lightweight caching for inventory checks and periodic queue refreshes
+ * to avoid excessive entity queries.
  *
  * @see DroneEntity
  * @see SitePlanner
  */
 public class DronePickupGoal extends Goal {
-    private static final int MAX_QUEUE_SIZE = 16;
-    private static final int SCAN_COOLDOWN = 20;
-    private static final int SPACE_CACHE_DURATION = 10;
-    private static final double PICKUP_RANGE_SQ = 2.25;
+
+    /* ------------------------------------------------------------ */
+    /* Tuning                                                       */
+    /* ------------------------------------------------------------ */
+
+    private static final int MAX_TARGET_QUEUE_SIZE = 16;
+    private static final double PICKUP_RANGE_SQUARED = 2.25;
+    private static final int QUEUE_REFRESH_INTERVAL = 20;
+    private static final int INVENTORY_CACHE_TICKS = 10;
+    private static final int TARGET_TIMEOUT_TICKS = 200;
+    private static final int ACTIVATION_COOLDOWN_TICKS = 100;
+
+    /* ------------------------------------------------------------ */
+    /* State                                                        */
+    /* ------------------------------------------------------------ */
 
     private final DroneEntity drone;
     private final Predicate<String> activationCondition;
-    private final Queue<ItemEntity> pickupQueue = new LinkedList<>();
+
+    private final Queue<ItemEntity> targetQueue = new LinkedList<>();
 
     private ItemEntity currentTarget;
-    private int checkCooldown = 0;
-    private int queueRefreshCooldown = 0;
-    private boolean cachedHasSpace = true;
-    private int spaceCacheTicks = 0;
+    private ItemEntity previousTarget;
 
-    /**
-     * Constructs a new pickup goal for the specified drone.
-     *
-     * @param drone the drone entity that will execute this goal
-     * @param activationCondition predicate that determines when this goal can activate based on drone state.
-     */
+    private int activationCooldownTicks = 0;
+    private int queueRefreshTicks = 0;
+
+    private boolean cachedInventorySpace = true;
+    private int inventoryCacheTicks = 0;
+
+    private int targetTimeoutTicks = 0;
+
     public DronePickupGoal(DroneEntity drone, Predicate<String> activationCondition) {
         this.drone = drone;
         this.activationCondition = activationCondition;
         this.setFlags(EnumSet.of(Flag.MOVE, Flag.LOOK));
     }
 
+    /* ------------------------------------------------------------ */
+    /* Lifecycle                                                    */
+    /* ------------------------------------------------------------ */
+
     @Override
     public boolean canUse() {
         if (!activationCondition.test(drone.getState())) return false;
-        if (this.checkCooldown-- > 0) return false;
+        if (activationCooldownTicks-- > 0) return false;
 
-        this.checkCooldown = 100;
+        activationCooldownTicks = ACTIVATION_COOLDOWN_TICKS;
 
         if (drone.getNavigation().isStuck()) return false;
         if (!hasInventorySpaceCached()) return false;
 
-        if (pickupQueue.isEmpty()) {
-            return populatePickupQueue();
-        }
-        return true;
+        return !targetQueue.isEmpty() || refreshTargetQueue();
     }
 
     @Override
     public void start() {
-        this.queueRefreshCooldown = SCAN_COOLDOWN;
-        invalidateSpaceCache();
-        nextTarget();
+        queueRefreshTicks = QUEUE_REFRESH_INTERVAL;
+        invalidateInventoryCache();
+        selectNextTarget();
     }
 
     @Override
     public void stop() {
-        this.currentTarget = null;
-        this.pickupQueue.clear();
-        this.drone.getNavigation().stop();
-        invalidateSpaceCache();
+        currentTarget = null;
+        targetQueue.clear();
+        drone.getNavigation().stop();
+        invalidateInventoryCache();
     }
 
     @Override
     public boolean canContinueToUse() {
         if (drone.getNavigation().isStuck()) return false;
-        if (this.currentTarget == null) return false;
-        if (!currentTarget.isAlive() || currentTarget.getItem().isEmpty()) return false;
+        if (currentTarget == null) return false;
+        if (!isValidTarget(currentTarget)) return false;
+
+        // Countdown timeout
+        if (targetTimeoutTicks-- <= 0) {
+            if (currentTarget.equals(previousTarget)) return false;
+
+            previousTarget = currentTarget;
+            targetTimeoutTicks = TARGET_TIMEOUT_TICKS;
+        }
 
         return hasInventorySpaceCached();
     }
 
+    /* ------------------------------------------------------------ */
+    /* Tick                                                         */
+    /* ------------------------------------------------------------ */
+
     @Override
     public void tick() {
-        updateSpaceCache();
 
-        if (!cachedHasSpace) {
-            this.pickupQueue.clear();
-            this.currentTarget = null;
+        if (inventoryCacheTicks > 0) {
+            inventoryCacheTicks--;
+        }
+
+        if (!cachedInventorySpace) {
+            targetQueue.clear();
+            currentTarget = null;
             return;
         }
 
-        if (!isValidTargetQuick(currentTarget)) {
-            nextTarget();
+        if (!isValidTarget(currentTarget)) {
+            selectNextTarget();
         }
+
         if (currentTarget == null) return;
 
-        this.drone.getLookControl().setLookAt(currentTarget);
+        drone.getLookControl().setLookAt(currentTarget);
 
-        if (this.drone.tickCount % 5 == 0) {
-            this.drone.getNavigation().moveTo(this.currentTarget, 1.0D);
+        if (drone.tickCount % 5 == 0) {
+            drone.getLogic().executeMovement(currentTarget.position());
         }
 
-        if (this.drone.distanceToSqr(this.currentTarget) <= PICKUP_RANGE_SQ) {
-            boolean pickedUp = this.drone.getLogic().itemPickUp();
+        if (drone.distanceToSqr(currentTarget) <= PICKUP_RANGE_SQUARED) {
+            boolean pickedUp = drone.getLogic().itemPickUp();
 
             if (pickedUp) {
-                invalidateSpaceCache();
-                nextTarget();
-            } else {
-                if (!this.drone.getLogic().hasInventorySpaceFor(currentTarget.getItem())) {
-                    this.pickupQueue.clear();
-                    this.currentTarget = null;
-                    cachedHasSpace = false;
-                }
+                invalidateInventoryCache();
+                selectNextTarget();
+            } else if (!drone.getLogic()
+                    .hasInventorySpaceFor(currentTarget.getItem())) {
+
+                targetQueue.clear();
+                currentTarget = null;
+                cachedInventorySpace = false;
             }
         }
 
-        if (--queueRefreshCooldown <= 0 && pickupQueue.isEmpty()) {
-            queueRefreshCooldown = SCAN_COOLDOWN;
-            populatePickupQueue();
+        // Queue refresh countdown
+        if (queueRefreshTicks-- <= 0 && targetQueue.isEmpty()) {
+            queueRefreshTicks = QUEUE_REFRESH_INTERVAL;
+            refreshTargetQueue();
         }
     }
 
-    /**
-     * Goes to a next valid target in the queue, discarding invalid items.
-     */
-    private void nextTarget() {
-        this.currentTarget = null;
+    /* ------------------------------------------------------------ */
+    /* Target Selection                                             */
+    /* ------------------------------------------------------------ */
 
-        while (!pickupQueue.isEmpty()) {
-            ItemEntity candidate = pickupQueue.poll();
-            if (isValidTargetQuick(candidate)) {
-                this.currentTarget = candidate;
+    private void selectNextTarget() {
+        currentTarget = null;
+
+        while (!targetQueue.isEmpty()) {
+            ItemEntity candidate = targetQueue.poll();
+            if (isValidTarget(candidate)) {
+                currentTarget = candidate;
                 break;
             }
         }
 
-        if (this.currentTarget != null) {
-            this.drone.getNavigation().moveTo(this.currentTarget, 1.0D);
+        if (currentTarget != null) {
+            targetTimeoutTicks = TARGET_TIMEOUT_TICKS;
+            drone.getNavigation().moveTo(currentTarget, 1.0D);
         }
     }
 
     /**
-     * Scans the configured work area for items and populates the pickup queue.
-     * Items get sorted by distance and limited to {@link #MAX_QUEUE_SIZE}.
-     *
-     * @return true if it finds any valid items, false otherwise
+     * Rebuilds the pickup queue from items inside the configured planner area.
      */
-    private boolean populatePickupQueue() {
-        this.pickupQueue.clear();
+    private boolean refreshTargetQueue() {
+        targetQueue.clear();
 
-        ItemStack planner = this.drone.getInventory().getStackInSlot(0);
+        ItemStack planner = drone.getInventory().getStackInSlot(0);
         if (!SitePlanner.isConfigured(planner)) return false;
 
         BlockPos start = SitePlanner.getStartPos(planner);
         BlockPos end = SitePlanner.getEndPos(planner);
-        AABB searchArea = new AABB(start).minmax(new AABB(end)).expandTowards(1, 1, 1);
 
-        List<ItemEntity> items = this.drone.level().getEntitiesOfClass(ItemEntity.class, searchArea);
+        AABB searchArea =
+                new AABB(start).minmax(new AABB(end))
+                        .expandTowards(1, 1, 1);
+
+        List<ItemEntity> items =
+                drone.level().getEntitiesOfClass(
+                        ItemEntity.class,
+                        searchArea
+                );
+
         if (items.isEmpty()) return false;
 
-        items.sort(Comparator.comparingDouble(this.drone::distanceToSqr));
+        items.sort(Comparator.comparingDouble(drone::distanceToSqr));
 
         int added = 0;
         for (ItemEntity item : items) {
-            if (added >= MAX_QUEUE_SIZE) break;
-            if (!isValidTargetQuick(item)) continue;
-            if (!this.drone.getLogic().hasInventorySpaceFor(item.getItem())) continue;
+            if (added >= MAX_TARGET_QUEUE_SIZE) break;
+            if (!isValidTarget(item)) continue;
+            if (!drone.getLogic()
+                    .hasInventorySpaceFor(item.getItem())) continue;
 
-            pickupQueue.add(item);
+            targetQueue.add(item);
             added++;
         }
 
-        return !pickupQueue.isEmpty();
+        return !targetQueue.isEmpty();
     }
 
-    /**
-     * Fast validation that checks only essential item state.
-     *
-     * @param item the item entity to validate
-     * @return true if the item alive and has a valid stack
-     */
-    private boolean isValidTargetQuick(ItemEntity item) {
+    private boolean isValidTarget(ItemEntity item) {
         return item != null
                 && item.isAlive()
                 && !item.getItem().isEmpty();
     }
 
-    /**
-     * Checks inventory space using a time-based cache to reduce expensive validation calls.
-     *
-     * @return true if the drone has inventory space available
-     */
+    /* ------------------------------------------------------------ */
+    /* Inventory Cache                                              */
+    /* ------------------------------------------------------------ */
+
     private boolean hasInventorySpaceCached() {
-        if (spaceCacheTicks > 0) {
-            return cachedHasSpace;
+        if (inventoryCacheTicks-- > 0) {
+            return cachedInventorySpace;
         }
 
-        cachedHasSpace = this.drone.getLogic().hasAnyInventorySpace();
-        spaceCacheTicks = SPACE_CACHE_DURATION;
-        return cachedHasSpace;
+        cachedInventorySpace =
+                drone.getLogic().hasAnyInventorySpace();
+
+        inventoryCacheTicks = INVENTORY_CACHE_TICKS;
+        return cachedInventorySpace;
     }
 
-    /**
-     * Decrements the space cache timer if active.
-     */
-    private void updateSpaceCache() {
-        if (spaceCacheTicks > 0) {
-            spaceCacheTicks--;
-        }
+    private void invalidateInventoryCache() {
+        inventoryCacheTicks = 0;
     }
 
-    /**
-     * Forces the inventory space cache to expire on the next check.
-     */
-    private void invalidateSpaceCache() {
-        spaceCacheTicks = 0;
-    }
+    /* ------------------------------------------------------------ */
 
     @Override
     public boolean isInterruptable() {

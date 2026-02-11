@@ -7,6 +7,7 @@ import com.uemc.assistance_drone.menus.DroneMenu;
 import com.uemc.assistance_drone.util.ModKeys;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.syncher.EntityDataAccessor;
@@ -29,6 +30,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidType;
@@ -186,7 +188,25 @@ public class DroneEntity extends PathfinderMob implements MenuProvider {
 
     @Override
     protected PathNavigation createNavigation(Level level) {
-        FlyingPathNavigation nav = new FlyingPathNavigation(this, level);
+        FlyingPathNavigation nav = new FlyingPathNavigation(this, level){
+            @Override
+            public boolean moveTo(@javax.annotation.Nullable Path pathentity, double speed) {
+                doStuckDetection(position());
+                return super.moveTo(pathentity, speed);
+            }
+            @Override
+            protected void doStuckDetection(Vec3 positionVec3) {
+                double dy = Math.abs(positionVec3.y - this.lastStuckCheckPos.y);
+                if (dy < 0.45D) {
+                    positionVec3 = new Vec3(
+                            positionVec3.x,
+                            this.lastStuckCheckPos.y,
+                            positionVec3.z
+                    );
+                }
+                super.doStuckDetection(positionVec3);
+            }
+        };
         nav.setCanOpenDoors(true);
         nav.setCanPassDoors(true);
         nav.setCanFloat(true);
