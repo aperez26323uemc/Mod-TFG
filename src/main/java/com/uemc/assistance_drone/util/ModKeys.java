@@ -32,7 +32,7 @@ public class ModKeys {
     public static final String SUBTITLE_FLYING_KEY = "subtitles.assistance_drone." + DRONE_FLYING_SOUND_KEY;
 
     // GUI General
-    public static final String GUI_CREATIVE_MODE_TAB_TITLE = "itemGroup." + CREATIVE_MODE_TAB_KEY; // Standard Minecraft format
+    public static final String GUI_CREATIVE_MODE_TAB_TITLE = "itemGroup." + CREATIVE_MODE_TAB_KEY;
     public static final String GUI_DRONE_MENU_MODES_LABEL = "gui.assistance_drone.modes_label";
     public static final String GUI_DRONE_MENU_STORAGE_LABEL = "gui.assistance_drone.storage_label";
     public static final String GUI_SITE_PLANNER_SLOT_HINT = "gui.assistance_drone.slot.hint.site_planner";
@@ -43,6 +43,14 @@ public class ModKeys {
     public static final String GUI_SITE_PLANNER_CLEARED = "gui.assistance_drone.site_planner.selection_cleared";
     public static final String GUI_SITE_PLANNER_ERROR_VOLUME_SMALL = "gui.assistance_drone.site_planner.error.volume_too_small";
     public static final String GUI_SITE_PLANNER_ERROR_MAX_SIZE = "gui.assistance_drone.site_planner.error.max_size";
+    public static final String GUI_SITE_PLANNER_RESIZED = "gui.assistance_drone.site_planner.resized";
+    public static final String GUI_SITE_PLANNER_MOVED = "gui.assistance_drone.site_planner.moved";
+    public static final String GUI_SITE_PLANNER_ERROR_RESIZE_LIMIT = "gui.assistance_drone.site_planner.error.resize_limit";
+
+    // Site Planner HUD
+    public static final String HUD_SITE_PLANNER_TITLE = "hud.assistance_drone.site_planner.title";
+    public static final String HUD_SITE_PLANNER_RESIZE = "hud.assistance_drone.site_planner.resize";
+    public static final String HUD_SITE_PLANNER_MOVE = "hud.assistance_drone.site_planner.move";
 
     // Tooltips (Site Planner)
     public static final String TOOLTIP_SITE_PLANNER_NO_SELECTION = "tooltip.assistance_drone.site_planner.no_selection";
@@ -64,12 +72,10 @@ public class ModKeys {
     // ====================
     //  Helpers
     // ====================
-    /** Returns: gui.assistance_drone.state.title.{stateId} */
     public static String getStateTitleKey(String stateId) {
         return GUI_STATE_TITLE_PREFIX + stateId;
     }
 
-    /** Returns: gui.assistance_drone.state.desc.{stateId} */
     public static String getStateDescKey(String stateId) {
         return GUI_STATE_DESCRIPTION_PREFIX + stateId;
     }

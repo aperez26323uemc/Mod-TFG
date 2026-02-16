@@ -18,5 +18,11 @@ public class ModMessages {
                 DroneStateMessage.STREAM_CODEC,
                 DroneStateMessage::handle
         );
+
+        registrar.playToServer(
+                SitePlannerActionMessage.TYPE,
+                SitePlannerActionMessage.STREAM_CODEC,
+                SitePlannerActionMessage::handle
+        );
     }
 }

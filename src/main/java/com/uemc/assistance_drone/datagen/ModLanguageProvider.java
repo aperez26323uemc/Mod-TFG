@@ -42,6 +42,14 @@ public class ModLanguageProvider extends LanguageProvider {
         add(ModKeys.GUI_SITE_PLANNER_ERROR_MAX_SIZE,
                 "Too big! No side can be larger than %s blocks. Your selection: %s×%s×%s");
         add(ModKeys.GUI_SITE_PLANNER_SLOT_HINT, "Place configured Site Planner here");
+        // Site Planner Advanced Controls
+        add(ModKeys.GUI_SITE_PLANNER_RESIZED, "Resized: %s×%s×%s (%s blocks)");
+        add(ModKeys.GUI_SITE_PLANNER_MOVED, "Moved %s by %s blocks");
+        add(ModKeys.GUI_SITE_PLANNER_ERROR_RESIZE_LIMIT, "Cannot resize: would exceed limits!");
+        // HUD
+        add(ModKeys.HUD_SITE_PLANNER_TITLE, "§6§lSite Planner Controls");
+        add(ModKeys.HUD_SITE_PLANNER_RESIZE, "§7Shift + Scroll: §fResize");
+        add(ModKeys.HUD_SITE_PLANNER_MOVE, "§7Ctrl + Shift + Scroll: §fMove");
 
         // Tooltips
         add(ModKeys.TOOLTIP_SITE_PLANNER_NO_SELECTION, "No area selected");

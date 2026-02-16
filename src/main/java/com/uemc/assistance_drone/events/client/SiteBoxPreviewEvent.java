@@ -55,7 +55,7 @@ public class SiteBoxPreviewEvent {
             );
 
     /* ------------------------------------------------------------ */
-    /* Marker Render Type                                           */
+    /* Render Types                                                 */
     /* ------------------------------------------------------------ */
 
     private static final RenderType MARKER_RENDER_TYPE = RenderType.create(
@@ -74,6 +74,22 @@ public class SiteBoxPreviewEvent {
                     .setLightmapState(RenderStateShard.LIGHTMAP)
                     .setOverlayState(RenderStateShard.OVERLAY)
                     .createCompositeState(true)
+    );
+
+    private static final RenderType XRAY_LINES_RENDER_TYPE = RenderType.create(
+            "xray_box_lines",
+            DefaultVertexFormat.POSITION_COLOR_NORMAL,
+            VertexFormat.Mode.LINES,
+            256,
+            false,
+            false,
+            RenderType.CompositeState.builder()
+                    .setShaderState(RenderStateShard.RENDERTYPE_LINES_SHADER)
+                    .setLineState(new RenderStateShard.LineStateShard(java.util.OptionalDouble.of(2.0D))) // Grosor opcional de la línea
+                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setCullState(RenderStateShard.NO_CULL)
+                    .setDepthTestState(RenderStateShard.NO_DEPTH_TEST)
+                    .createCompositeState(false)
     );
 
     /* ------------------------------------------------------------ */
@@ -250,8 +266,9 @@ public class SiteBoxPreviewEvent {
     ) {
         Minecraft mc = Minecraft.getInstance();
         Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
+
         VertexConsumer buffer =
-                mc.renderBuffers().bufferSource().getBuffer(RenderType.lines());
+                mc.renderBuffers().bufferSource().getBuffer(XRAY_LINES_RENDER_TYPE);
 
         poseStack.pushPose();
         poseStack.translate(-cam.x, -cam.y, -cam.z);
