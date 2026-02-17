@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "#c:chests",
+    "#c:barrels",
+    "#c:shulker_boxes"
+  ]
+}

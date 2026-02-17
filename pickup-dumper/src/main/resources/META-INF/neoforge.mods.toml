@@ -1,0 +1,38 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+description='''
+Addon for Assistance Drone: Enables autonomous inventory dumping to adjacent containers.
+'''
+
+# 1. AÑADIR LA CONFIGURACIÓN DE MIXINS AQUÍ
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+# 2. DEPENDENCIAS BASE (NeoForge y Minecraft)
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version},)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"
+
+# 3. AÑADIR LA DEPENDENCIA OBLIGATORIA DEL MOD BASE AQUÍ
+[[dependencies.${mod_id}]]
+modId="assistance_drone"
+type="required"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
