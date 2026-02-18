@@ -7,6 +7,7 @@ import com.uemc.assistance_drone.items.SitePlanner;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 import net.neoforged.neoforge.items.ItemStackHandler;
@@ -37,14 +38,27 @@ import java.util.function.Predicate;
  *       resumes normal pickup behaviour.</li>
  * </ol>
  *
+ * <h2>Interruption safety</h2>
+ * {@code isInterruptable()} returns {@code false} while dump mode is active so
+ * that higher-priority goals (e.g. {@code DroneFluidHandlerGoal}) cannot abort
+ * a dump cycle mid-transfer. The original goal returns {@code true} when the
+ * inventory is full, which is precisely the condition under which we run, so
+ * we must override that value.
+ *
+ * <h2>Stuck handling</h2>
+ * When the navigator reports a stuck state the drone does not abandon dump mode.
+ * Instead the current target is blacklisted for this cycle and the cache is
+ * queried for the next nearest container. Dump mode only terminates when no
+ * reachable, non-stuck container remains, or when the inventory has been
+ * sufficiently emptied.
+ *
  * <h2>Item-loss safety</h2>
  * Item transfer follows a strict simulate → extract → insert → recover pattern.
  * If the container rejects items during the real insertion (e.g. due to a
  * concurrent modification by a player or another goal between the simulation
  * and the actual call), any leftover is first attempted to be returned to the
  * drone. If the drone is also full at that exact moment, the items are spawned
- * as {@code ItemEntity} via  rather than silently
- * deleted.
+ * as {@code ItemEntity}.
  *
  * <h2>Performance contract</h2>
  * All perimeter scanning is delegated to {@link PerimeterContainerCache}, which
@@ -62,13 +76,21 @@ public abstract class DronePickupGoalMixin {
     @Unique
     private static final int AD$MIN_OCCUPIED_SLOTS = 4;
 
+    /**
+     * Maximum consecutive ticks the drone may be stuck on the same target
+     * before it is evicted and the next container is tried.
+     */
+    @Unique
+    private static final int AD$STUCK_TOLERANCE_TICKS = 40;
+
     @Shadow private DroneEntity drone;
     @Shadow private Predicate<String> activationCondition;
 
-    @Unique private boolean               ad$dumpMode             = false;
-    @Unique private BlockPos              ad$dumpTarget           = null;
-    @Unique private boolean               ad$containerFull        = false;
-    @Unique private final PerimeterContainerCache ad$cache = new PerimeterContainerCache();
+    @Unique private boolean                     ad$dumpMode          = false;
+    @Unique private BlockPos                    ad$dumpTarget        = null;
+    @Unique private boolean                     ad$containerFull     = false;
+    @Unique private int                         ad$stuckTicks        = 0;
+    @Unique private final PerimeterContainerCache ad$cache           = new PerimeterContainerCache();
 
     // ----------------------------------------------------------------
     // canUse
@@ -78,7 +100,7 @@ public abstract class DronePickupGoalMixin {
      * Intercepts goal activation to trigger dump mode when the drone's
      * inventory is full and at least one container is known to the cache.
      *
-     * <p>If dump mode is already active, the method short-circuits with
+     * <p>If dump mode is already active the method short-circuits with
      * {@code true} to keep the goal alive, or resets and falls through to
      * the original logic if dumping is no longer needed.
      */
@@ -101,6 +123,7 @@ public abstract class DronePickupGoalMixin {
         if (!drone.getLogic().hasAnyInventorySpace() && ad$cache.hasValidContainers()) {
             ad$dumpMode   = true;
             ad$dumpTarget = null;
+            ad$stuckTicks = 0;
             cir.setReturnValue(true);
         }
     }
@@ -112,16 +135,17 @@ public abstract class DronePickupGoalMixin {
     /**
      * Keeps the goal active while dump mode is in progress, bypassing the
      * original check (which would return {@code false} because the inventory
-     * is full). Exits cleanly if the drone state changed or dumping finished.
+     * is full).
+     *
+     * <p>Exits only if the drone state became invalid or dumping finished.
+     * A stuck navigator is handled inside {@link #ad$onTick} by rotating to
+     * the next container rather than abandoning dump mode entirely.
      */
     @Inject(method = "canContinueToUse", at = @At("HEAD"), cancellable = true)
     private void ad$onCanContinueToUse(CallbackInfoReturnable<Boolean> cir) {
         if (!ad$dumpMode) return;
 
-        boolean stateInvalid = !activationCondition.test(drone.getState());
-        boolean stuck        = drone.getNavigation().isStuck();
-
-        if (stateInvalid || stuck || !ad$dumpingRequired()) {
+        if (!activationCondition.test(drone.getState()) || !ad$dumpingRequired()) {
             ad$exitDumpMode();
             cir.setReturnValue(false);
             return;
@@ -131,13 +155,37 @@ public abstract class DronePickupGoalMixin {
     }
 
     // ----------------------------------------------------------------
+    // isInterruptable
+    // ----------------------------------------------------------------
+
+    /**
+     * Prevents higher-priority goals from interrupting an in-progress dump
+     * cycle. Without this override, the base goal returns {@code true} when
+     * the inventory is full (which is always the case during dumping), allowing
+     * e.g. {@code DroneFluidHandlerGoal} to abort the transfer mid-slot.
+     *
+     * <p>Once dump mode exits, control returns to the original implementation.
+     */
+    @Inject(method = "isInterruptable", at = @At("HEAD"), cancellable = true)
+    private void ad$onIsInterruptable(CallbackInfoReturnable<Boolean> cir) {
+        if (ad$dumpMode) {
+            cir.setReturnValue(false);
+        }
+    }
+
+    // ----------------------------------------------------------------
     // tick
     // ----------------------------------------------------------------
 
     /**
      * Replaces the standard pickup tick while dump mode is active.
-     * Navigates to the nearest accessible container and deposits items,
-     * then cancels the original tick body to prevent mixed behaviour.
+     *
+     * <p>If the navigator reports a stuck state for more than
+     * {@value #AD$STUCK_TOLERANCE_TICKS} consecutive ticks, the current target
+     * is evicted from the cache and the next nearest container is selected.
+     * This loop continues until either a reachable container is found or the
+     * cache is exhausted, at which point dump mode exits gracefully without
+     * item loss (items remain in the drone).
      */
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void ad$onTick(CallbackInfo ci) {
@@ -146,23 +194,48 @@ public abstract class DronePickupGoalMixin {
 
         ad$advanceCache();
 
+        // Handle stuck navigator: evict the problematic target and try the next one.
+        if (drone.getNavigation().isStuck()) {
+            ad$stuckTicks++;
+            if (ad$stuckTicks >= AD$STUCK_TOLERANCE_TICKS) {
+                if (ad$dumpTarget != null) {
+                    ad$cache.evict(ad$dumpTarget);
+                }
+                ad$dumpTarget = ad$nearestContainer();
+                ad$stuckTicks = 0;
+
+                // No reachable container remains — exit dump mode gracefully.
+                if (ad$dumpTarget == null) {
+                    ad$exitDumpMode();
+                    ci.cancel();
+                    return;
+                }
+            }
+            // Still within tolerance: keep trying to reach the current target.
+            ci.cancel();
+            return;
+        } else {
+            ad$stuckTicks = 0;
+        }
+
         if (ad$dumpTarget == null || !ad$isTargetAlive()) {
             ad$dumpTarget    = ad$nearestContainer();
             ad$containerFull = false;
         }
 
         if (ad$dumpTarget == null) {
+            // Cache has no reachable container right now; wait for the next scan.
             ci.cancel();
             return;
         }
 
-        drone.getLookControl().setLookAt(ad$dumpTarget.getCenter());
+        drone.getLookControl().setLookAt(Vec3.atCenterOf(ad$dumpTarget));
 
         if (drone.getLogic().isInRangeToInteract(ad$dumpTarget)) {
             drone.getNavigation().stop();
             ad$depositItems();
         } else {
-            drone.getLogic().executeMovement(ad$dumpTarget.getCenter());
+            drone.getLogic().executeMovement(Vec3.atCenterOf(ad$dumpTarget));
         }
 
         ci.cancel();
@@ -196,12 +269,11 @@ public abstract class DronePickupGoalMixin {
      *       the container can accept without touching any inventory.</li>
      *   <li><b>Extract</b> — remove exactly that many items from the drone.</li>
      *   <li><b>Insert</b> — perform the real insertion into the container.</li>
-     *   <li><b>Recover</b> — if the container returned a non-empty remainder
-     *       (possible if its state changed between steps 1 and 3), attempt to
-     *       return the items to the drone. If the drone is also full, the items
-     *       are spawned as an {@code ItemEntity} at the drone's position.
-     *       This ensures zero item loss under any
-     *       concurrency scenario.</li>
+     *   <li><b>Recover</b> — if the container returned a non-empty remainder,
+     *       attempt to return the items to the drone. If the drone is also full,
+     *       the items are spawned as an {@code ItemEntity} at the drone's
+     *       position. This ensures zero item loss under any concurrency
+     *       scenario.</li>
      * </ol>
      */
     @Unique
@@ -215,7 +287,7 @@ public abstract class DronePickupGoalMixin {
             return;
         }
 
-        ItemStackHandler droneInv  = drone.getInventory();
+        ItemStackHandler droneInv   = drone.getInventory();
         int              totalSlots = droneInv.getSlots();
         int              occupied   = ad$countOccupiedSlots();
 
@@ -244,7 +316,6 @@ public abstract class DronePickupGoalMixin {
             if (!rejected.isEmpty()) {
                 ItemStack stillRejected = ItemHandlerHelper.insertItemStacked(droneInv, rejected, false);
                 if (!stillRejected.isEmpty()) {
-                    // Drone also full: spawn as item entity — never lose items
                     Block.popResource(drone.level(), drone.blockPosition(), stillRejected);
                 }
                 ad$containerFull = true;
@@ -326,5 +397,6 @@ public abstract class DronePickupGoalMixin {
         ad$dumpMode      = false;
         ad$dumpTarget    = null;
         ad$containerFull = false;
+        ad$stuckTicks    = 0;
     }
 }

@@ -25,7 +25,7 @@ public final class ModTags {
      * machines (furnaces, Mekanism machines, Create contraptions, etc.) are
      * excluded by omission — they simply do not appear in any storage tag.</p>
      *
-     * <p>Tag location: {@code data/pickup_dumper/tags/blocks/valid_dump_containers.json}</p>
+     * <p>Tag location: {@code data/pickup_dumper/tags/block/valid_dump_containers.json}</p>
      */
     public static final TagKey<Block> VALID_DUMP_CONTAINERS = TagKey.create(
             Registries.BLOCK,

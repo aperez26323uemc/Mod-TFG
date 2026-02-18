@@ -391,9 +391,9 @@ public class DroneAiLogic {
 
         for (int i = 0; i < inventory.getSlots(); i++) {
             ItemStack stack = inventory.getStackInSlot(i);
-            if (stack.isEmpty() || stack.getCount() < stack.getMaxStackSize()) {
-                return true;
-            }
+            if (stack.isEmpty()) return true;
+            int effectiveLimit = Math.min(inventory.getSlotLimit(i), stack.getMaxStackSize());
+            if (stack.getCount() < effectiveLimit) return true;
         }
         return false;
     }
