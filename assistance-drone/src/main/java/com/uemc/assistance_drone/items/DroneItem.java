@@ -51,8 +51,7 @@ public class DroneItem extends Item {
     }
 
     private Vec3 calculateSpawnPosition(BlockHitResult hitResult) {
-        Vec3 hitLocation = hitResult.getLocation();
-        Vec3 normalOffset = hitLocation.normalize().scale(0.5);
-        return hitLocation.add(normalOffset);
+        return Vec3.atCenterOf(hitResult.getBlockPos())
+                .add(Vec3.atLowerCornerOf(hitResult.getDirection().getNormal()).scale(1.0));
     }
 }
