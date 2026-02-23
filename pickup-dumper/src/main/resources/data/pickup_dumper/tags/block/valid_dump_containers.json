@@ -1,8 +1,8 @@
 {
   "replace": false,
   "values": [
-    "#c:chests",
-    "#c:barrels",
-    "#c:shulker_boxes"
+    { "id": "#c:chests", "required": false },
+    { "id": "#c:barrels", "required": false },
+    { "id": "#minecraft:shulker_boxes", "required": false }
   ]
 }
