@@ -10,7 +10,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
-import net.neoforged.neoforge.common.Tags;
 
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -205,7 +204,7 @@ public class FarmAreaCache {
             }
         }
 
-        if (!state.is(Tags.Blocks.CROPS) && !state.is(BlockTags.CROPS)) {
+        if (!state.is(BlockTags.CROPS)) {
             return false;
         }
 
@@ -216,7 +215,6 @@ public class FarmAreaCache {
 
     private boolean isCrop(BlockState state) {
         return state.getBlock() instanceof CropBlock
-                || state.is(Tags.Blocks.CROPS)
                 || state.is(BlockTags.CROPS);
     }
 
