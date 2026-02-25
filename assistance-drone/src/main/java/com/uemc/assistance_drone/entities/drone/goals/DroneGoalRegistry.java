@@ -15,10 +15,8 @@ public class DroneGoalRegistry {
             String id,
             int priority,
             Function<DroneEntity, Goal> factory,
-            // NUEVO: Predicado de validación (¿Puedo activar este estado?)
             Predicate<DroneEntity> requirement
     ) {
-        // Constructor compacto para estados sin requisitos (Idle, Follow)
         public StateDefinition(String id, int priority, Function<DroneEntity, Goal> factory) {
             this(id, priority, factory, d -> true);
         }
@@ -38,6 +36,9 @@ public class DroneGoalRegistry {
     }
 
     private static final Map<String, StateDefinition> REGISTRY = new LinkedHashMap<>();
+    private static final Set<String> PICKUP_ACTIVE_STATES = new HashSet<>(
+            Set.of(ModKeys.STATE_PICKUP, ModKeys.STATE_MINE)
+    );
 
     public static void register(String id, int priority, Function<DroneEntity, Goal> factory, Predicate<DroneEntity> requirement) {
         REGISTRY.put(id, new StateDefinition(id, priority, factory, requirement));
@@ -47,9 +48,16 @@ public class DroneGoalRegistry {
         register(id, priority, factory, d -> true);
     }
 
-    // ... getters (getDefinitions, get) iguales ...
     public static Collection<StateDefinition> getDefinitions() { return REGISTRY.values(); }
     public static StateDefinition get(String id) { return REGISTRY.get(id); }
+
+    /**
+     * Allows addons to declare that their custom state should also
+     * activate the built-in pickup goal.
+     */
+    public static void addPickupGoal(String stateId) {
+        PICKUP_ACTIVE_STATES.add(stateId);
+    }
 
     static {
         // IDLE & FOLLOW (Sin requisitos especiales)
@@ -58,7 +66,7 @@ public class DroneGoalRegistry {
 
         // PICKUP (Requiere Site Planner)
         register(ModKeys.STATE_PICKUP, 2,
-                drone -> new DronePickupGoal(drone, s -> s.equals(ModKeys.STATE_PICKUP) || s.equals(ModKeys.STATE_MINE)),
+                drone -> new DronePickupGoal(drone, PICKUP_ACTIVE_STATES::contains),
                 DroneEntity::hasSitePlanner
         );
 
