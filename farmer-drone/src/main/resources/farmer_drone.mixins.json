@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.uemc.farmer_drone.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "DroneGoalRegistryMixin",
+    "DroneAiLogicMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "verbose": false
+}
