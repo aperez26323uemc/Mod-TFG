@@ -5,8 +5,10 @@ import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import com.uemc.assistance_drone.entities.drone.goals.DronePickupGoal;
 import com.uemc.assistance_drone.items.SitePlanner;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
@@ -120,7 +122,7 @@ public abstract class DronePickupGoalMixin {
             return;
         }
 
-        if (!drone.getLogic().hasAnyInventorySpace() && ad$cache.hasValidContainers()) {
+        if (ad$shouldEnterDumpMode() && ad$cache.hasValidContainers()) {
             ad$dumpMode   = true;
             ad$dumpTarget = null;
             ad$stuckTicks = 0;
@@ -355,6 +357,46 @@ public abstract class DronePickupGoalMixin {
     @Unique
     private boolean ad$dumpingRequired() {
         return ad$cache.hasValidContainers() && ad$countOccupiedSlots() > AD$MIN_OCCUPIED_SLOTS;
+    }
+
+    /**
+     * Determines whether dumping should start.
+     *
+     * <p>Besides the classic "no free inventory space" case, this also handles
+     * the scenario where all storage slots are occupied with partial stacks and
+     * there are pickup candidates in the work area that cannot merge into any
+     * existing stack. In that situation the drone still needs to free a slot,
+     * so dump mode must start proactively.
+     */
+    @Unique
+    private boolean ad$shouldEnterDumpMode() {
+        if (!drone.getLogic().hasAnyInventorySpace()) {
+            return true;
+        }
+
+        ItemStackHandler inv = drone.getInventory();
+        if (ad$countOccupiedSlots() < inv.getSlots() - 1) {
+            return false;
+        }
+
+        ItemStack planner = inv.getStackInSlot(0);
+        if (!SitePlanner.isConfigured(planner)) {
+            return false;
+        }
+
+        BlockPos start = SitePlanner.getStartPos(planner);
+        BlockPos end = SitePlanner.getEndPos(planner);
+
+        AABB searchArea = new AABB(start).minmax(new AABB(end)).expandTowards(1, 1, 1);
+
+        for (ItemEntity item : drone.level().getEntitiesOfClass(ItemEntity.class, searchArea)) {
+            if (!item.isAlive() || item.getItem().isEmpty()) continue;
+            if (!drone.getLogic().hasInventorySpaceFor(item.getItem())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Counts occupied storage slots (indices 1 through {@code slots - 1}). */
