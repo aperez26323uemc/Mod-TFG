@@ -172,12 +172,13 @@ public class DroneFarmGoal extends Goal {
     }
 
     private Vec3 getCompactFarmAnchor(BlockPos interactionPos) {
-        BlockPos below = interactionPos.below();
         if (drone.level().getBlockState(interactionPos.above()).canBeReplaced()) {
             return new Vec3(interactionPos.getX() + 0.5D, interactionPos.getY() + 0.65D, interactionPos.getZ() + 0.5D);
         }
 
-        return new Vec3(below.getX() + 0.5D, below.getY() + 0.55D, below.getZ() + 0.5D);
+        // Compact farms can have a solid block immediately above the crop.
+        // Keep the drone inside the crop block's vertical space to avoid clipping into farmland below.
+        return new Vec3(interactionPos.getX() + 0.5D, interactionPos.getY() + 0.1D, interactionPos.getZ() + 0.5D);
     }
 
     private BlockPos getInteractionPos(BlockPos targetPos, TargetType targetType) {
@@ -195,12 +196,13 @@ public class DroneFarmGoal extends Goal {
     }
 
     private boolean isSeedLikeItem(ItemStack stack) {
-        if (stack.isEmpty() || !(stack.getItem() instanceof net.neoforged.neoforge.common.IPlantable plantable)) {
+        if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem)) {
             return false;
         }
 
-        return plantable.getPlantType(drone.level(), drone.blockPosition())
-                == net.neoforged.neoforge.common.PlantType.CROP;
+        var block = blockItem.getBlock();
+        return block instanceof net.minecraft.world.level.block.CropBlock
+                || block.defaultBlockState().is(net.minecraft.tags.BlockTags.CROPS);
     }
 
     private ItemStack findPlantableSeed(BlockPos farmlandPos) {
