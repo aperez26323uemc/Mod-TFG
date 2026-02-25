@@ -2,7 +2,6 @@ package com.uemc.farmer_drone.cache;
 
 import com.uemc.assistance_drone.items.SitePlanner;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -11,7 +10,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
-import net.neoforged.neoforge.common.IPlantable;
 import net.neoforged.neoforge.common.Tags;
 
 import java.util.Iterator;
@@ -223,11 +221,13 @@ public class FarmAreaCache {
     }
 
     public static boolean canPlantCropSeedOn(Level level, BlockPos farmlandPos, ItemStack stack) {
-        if (stack.isEmpty() || !(stack.getItem() instanceof IPlantable plantable)) {
+        if (stack.isEmpty() || !(stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem)) {
             return false;
         }
 
-        if (plantable.getPlantType(level, farmlandPos.relative(Direction.UP)) != net.neoforged.neoforge.common.PlantType.CROP) {
+        Block block = blockItem.getBlock();
+        BlockState plantState = block.defaultBlockState();
+        if (!(block instanceof CropBlock) && !plantState.is(BlockTags.CROPS)) {
             return false;
         }
 
@@ -240,7 +240,6 @@ public class FarmAreaCache {
             return false;
         }
 
-        BlockState plantState = plantable.getPlant(level, cropPos);
         return plantState.canSurvive(level, cropPos);
     }
 
