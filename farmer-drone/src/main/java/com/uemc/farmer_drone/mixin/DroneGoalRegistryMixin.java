@@ -5,6 +5,7 @@ import com.uemc.assistance_drone.entities.drone.goals.DroneGoalRegistry;
 import com.uemc.farmer_drone.ModKeys;
 import com.uemc.farmer_drone.goals.DroneFarmGoal;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -15,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = DroneGoalRegistry.class, remap = false)
 public abstract class DroneGoalRegistryMixin {
 
-    private static final int FARMER_GOAL_PRIORITY = 2;
+    @Unique
+    private static final int FARMER_GOAL_PRIORITY = 3;
 
     @Inject(method = "<clinit>", at = @At("TAIL"))
     private static void farmer_drone$registerGoal(CallbackInfo ci) {
@@ -25,5 +27,6 @@ public abstract class DroneGoalRegistryMixin {
                 drone -> new DroneFarmGoal(drone, state -> ModKeys.STATE_FARMER.equals(state)),
                 DroneEntity::hasSitePlanner
         );
+        DroneGoalRegistry.addPickupGoal(ModKeys.STATE_FARMER);
     }
 }
