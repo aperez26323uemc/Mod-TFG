@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.uemc.path_lighter_drone.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "DroneEntityMixin",
+    "DroneEntityGoalMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "verbose": false
+}
