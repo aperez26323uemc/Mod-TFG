@@ -67,7 +67,7 @@ public final class PathLighterPlanner {
         }
 
         BlockState state = blockItem.getBlock().defaultBlockState();
-        return state.getLightEmission(level, contextPos) > ModKeys.SUITABLE_LIGHT_EMISSION;
+        return state.getLightEmission(level, contextPos) >= ModKeys.SUITABLE_LIGHT_EMISSION;
     }
 
     private static List<BlockPos> buildProjectedPath(Level level, Player player) {
@@ -90,18 +90,36 @@ public final class PathLighterPlanner {
         List<BlockPos> projected = new ArrayList<>(grid.size());
 
         Integer previousGround = null;
+        int currentY = player.getBlockY() - 1; // Altura base desde los pies del jugador
+
         for (BlockPos xz : grid) {
-            int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, xz.getX(), xz.getZ()) - 1;
-            if (previousGround != null && y - previousGround >= ModKeys.WALL_HEIGHT_BLOCKS) {
+            int y = findGroundY(level, xz.getX(), currentY, xz.getZ());
+
+            if (previousGround != null && Math.abs(y - previousGround) >= ModKeys.WALL_HEIGHT_BLOCKS) {
                 break;
             }
 
             BlockPos ground = new BlockPos(xz.getX(), y, xz.getZ());
             projected.add(ground);
             previousGround = y;
+            currentY = y;
         }
 
         return projected;
+    }
+
+    private static int findGroundY(Level level, int x, int startY, int z) {
+        int maxY = startY + ModKeys.WALL_HEIGHT_BLOCKS;
+        int minY = Math.max(level.getMinBuildHeight(), startY - 16);
+
+        for (int y = maxY; y >= minY; y--) {
+            BlockPos pos = new BlockPos(x, y, z);
+            BlockState state = level.getBlockState(pos);
+            if (state.blocksMotion() || !level.getFluidState(pos).isEmpty()) {
+                return y;
+            }
+        }
+        return startY;
     }
 
     private static double clampToHorizontalPrism(Vec3 playerPos, Vec3 start, Vec3 dir, double radius) {
@@ -225,12 +243,14 @@ public final class PathLighterPlanner {
             return false;
         }
 
+        Player fakePlayer = level instanceof net.minecraft.server.level.ServerLevel serverLevel
+                ? net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(serverLevel)
+                : null;
+
+        BlockPos clickedPos = pos.below();
         var context = new net.minecraft.world.item.context.BlockPlaceContext(
-                level,
-                null,
-                net.minecraft.world.InteractionHand.MAIN_HAND,
-                stack,
-                new BlockHitResult(Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, pos, false)
+                level, fakePlayer, net.minecraft.world.InteractionHand.MAIN_HAND, stack,
+                new BlockHitResult(Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, clickedPos, false)
         );
         return blockItem.getBlock().getStateForPlacement(context) != null;
     }
