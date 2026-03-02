@@ -10,7 +10,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
 
-@EventBusSubscriber(modid = PathLighterDrone.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@EventBusSubscriber(modid = PathLighterDrone.MODID, value = Dist.CLIENT)
 public final class PathLighterKeyMappings {
 
     private PathLighterKeyMappings() {

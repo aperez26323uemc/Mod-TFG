@@ -5,7 +5,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
-@EventBusSubscriber(modid = PathLighterDrone.MODID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = PathLighterDrone.MODID)
 public final class PathLighterNetworking {
 
     private PathLighterNetworking() {
