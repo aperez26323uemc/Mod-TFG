@@ -449,9 +449,16 @@ public class DroneAiLogic {
             return false;
         }
 
+        Player player = null;
+        if (!level.isClientSide() && level instanceof ServerLevel serverLevel) {
+            player = net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(serverLevel);
+            player.setXRot(drone.getXRot());
+            player.setYRot(drone.getYRot());
+        }
+
         BlockPlaceContext context = new BlockPlaceContext(
-                level, null, InteractionHand.MAIN_HAND, stack,
-                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false)
+                level, player, InteractionHand.MAIN_HAND, stack,
+                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos.below(), false)
         );
 
         return blockItem.place(context).consumesAction();
