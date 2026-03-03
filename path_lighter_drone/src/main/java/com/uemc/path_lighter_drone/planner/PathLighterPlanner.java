@@ -9,7 +9,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -74,7 +73,7 @@ public final class PathLighterPlanner {
         Vec3 start = player.getEyePosition();
         Vec3 look = player.getLookAngle().normalize();
 
-        double endDistance = clampToHorizontalPrism(player.position(), start, look, ModKeys.PATH_RADIUS_BLOCKS);
+        double endDistance = clampToHorizontalPrism(player.position(), start, look);
         if (endDistance <= 0.0D) {
             return List.of();
         }
@@ -90,41 +89,51 @@ public final class PathLighterPlanner {
         List<BlockPos> projected = new ArrayList<>(grid.size());
 
         Integer previousGround = null;
-        int currentY = player.getBlockY() - 1; // Altura base desde los pies del jugador
+        double totalDist2D = Math.hypot(finalPoint.x - start.x, finalPoint.z - start.z);
 
         for (BlockPos xz : grid) {
-            int y = findGroundY(level, xz.getX(), currentY, xz.getZ());
+            double currentDist2D = Math.hypot((xz.getX() + 0.5D) - start.x, (xz.getZ() + 0.5D) - start.z);
+            double t = totalDist2D > 0 ? Math.max(0.0D, Math.min(1.0D, currentDist2D / totalDist2D)) : 0.0D;
 
-            if (previousGround != null && Math.abs(y - previousGround) >= ModKeys.WALL_HEIGHT_BLOCKS) {
+            double rayY = start.y + t * (finalPoint.y - start.y);
+            int startScanY = (int) Math.floor(rayY);
+
+            Integer y = findGroundY(level, xz.getX(), startScanY, xz.getZ());
+
+            if (y == null) { // void
+                break;
+            }
+
+            if (previousGround != null && (y - previousGround) >= ModKeys.WALL_HEIGHT_BLOCKS) {
                 break;
             }
 
             BlockPos ground = new BlockPos(xz.getX(), y, xz.getZ());
             projected.add(ground);
             previousGround = y;
-            currentY = y;
         }
 
         return projected;
     }
 
-    private static int findGroundY(Level level, int x, int startY, int z) {
-        int maxY = startY + ModKeys.WALL_HEIGHT_BLOCKS;
-        int minY = Math.max(level.getMinBuildHeight(), startY - 16);
+    private static Integer findGroundY(Level level, int x, int startY, int z) {
+        int minY = level.getMinBuildHeight();
 
-        for (int y = maxY; y >= minY; y--) {
+        for (int y = startY; y >= minY; y--) {
             BlockPos pos = new BlockPos(x, y, z);
             BlockState state = level.getBlockState(pos);
-            if (state.blocksMotion() || !level.getFluidState(pos).isEmpty()) {
+
+            if (!state.getCollisionShape(level, pos).isEmpty() || !level.getFluidState(pos).isEmpty()) {
                 return y;
             }
         }
-        return startY;
+        return null;
     }
 
-    private static double clampToHorizontalPrism(Vec3 playerPos, Vec3 start, Vec3 dir, double radius) {
+    private static double clampToHorizontalPrism(Vec3 playerPos, Vec3 start, Vec3 dir) {
         double tx = Double.POSITIVE_INFINITY;
         double tz = Double.POSITIVE_INFINITY;
+        double radius = ModKeys.PATH_RADIUS_BLOCKS;
 
         if (Math.abs(dir.x) > 1.0E-6D) {
             double boundX = playerPos.x + Math.copySign(radius, dir.x);
@@ -143,21 +152,40 @@ public final class PathLighterPlanner {
         return t;
     }
 
+    /**
+     * Selects target nodes along the projected path using linear interpolation.
+     * <p>
+     * Ensures that light sources are distributed evenly across the entire path
+     * without exceeding the maximum allowed spacing defined by {@code ModKeys.NODE_SPACING}.
+     *
+     * @param path the full list of block positions representing the projected path
+     * @return a list of evenly spaced target nodes for light placement
+     */
     private static List<BlockPos> selectNodes(List<BlockPos> path) {
         if (path.size() <= ModKeys.FIRST_NODE_DISTANCE) {
             return List.of();
         }
 
-        Set<BlockPos> ordered = new HashSet<>();
+        int startIndex = ModKeys.FIRST_NODE_DISTANCE;
+        int endIndex = path.size() - 1;
+        int distance = endIndex - startIndex;
+
         List<BlockPos> result = new ArrayList<>();
+        Set<BlockPos> ordered = new HashSet<>();
 
-        addNode(path.get(ModKeys.FIRST_NODE_DISTANCE), ordered, result);
-
-        for (int i = ModKeys.FIRST_NODE_DISTANCE + ModKeys.NODE_SPACING; i < path.size() - 1; i += ModKeys.NODE_SPACING) {
-            addNode(path.get(i), ordered, result);
+        if (distance <= ModKeys.NODE_SPACING / 2) {
+            addNode(path.get(startIndex + distance / 2), ordered, result);
+            return result;
         }
 
-        addNode(path.get(path.size() - 1), ordered, result);
+        int numSegments = (int) Math.ceil((double) distance / ModKeys.NODE_SPACING);
+        double step = (double) distance / numSegments;
+
+        for (int i = 0; i <= numSegments; i++) {
+            int index = startIndex + (int) Math.round(i * step);
+            addNode(path.get(Math.min(index, endIndex)), ordered, result);
+        }
+
         return result;
     }
 
@@ -182,7 +210,7 @@ public final class PathLighterPlanner {
     }
 
     private static boolean needsLight(Level level, BlockPos pos) {
-        if (!level.getFluidState(pos).isEmpty()) {
+        if (!level.getFluidState(pos.below()).isEmpty() || !level.getFluidState(pos).isEmpty()) {
             return false;
         }
         return level.getMaxLocalRawBrightness(pos) < ModKeys.NODE_LIGHT_THRESHOLD;
