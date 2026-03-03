@@ -62,13 +62,15 @@ public class DronePathLighterGoal extends Goal {
             return;
         }
 
-        BlockPos target = currentTask.placements().get(nodeIndex);
+        PathLightingTask.Node node = currentTask.placements().get(nodeIndex);
+        BlockPos target = node.placement();
+
         if (!drone.getLogic().isBlockAccessible(target)) {
             advanceNode();
             return;
         }
 
-        Vec3 movement = new Vec3(target.getX() + 0.5D, target.getY() + 1.0D, target.getZ() + 0.5D);
+        Vec3 movement = Vec3.atCenterOf(target).add(0, 1, 0);
         drone.getLookControl().setLookAt(movement);
         drone.getLogic().executeMovement(movement);
 
@@ -81,25 +83,62 @@ public class DronePathLighterGoal extends Goal {
 
         drone.getNavigation().stop();
 
-        ItemStack candidate = findPlaceableLightBlock(target);
-        if (candidate.isEmpty()) {
+        ItemStack stack = findSuitableStack(target);
+        if (stack.isEmpty()) {
             advanceNode();
             return;
         }
 
-        drone.getLogic().placeBlock(target, candidate);
-        advanceNode();
+        if (attemptPlacement(node, stack)) {
+            advanceNode();
+        } else {
+            // World changed between evaluation and execution; skip to avoid infinite loop
+            advanceNode();
+        }
     }
 
-    private ItemStack findPlaceableLightBlock(BlockPos target) {
+    /**
+     * Places the light block by clicking {@link PathLightingTask.Node#face()} on
+     * {@link PathLightingTask.Node#support()}, replicating what a player would do.
+     */
+    private boolean attemptPlacement(PathLightingTask.Node node, ItemStack stack) {
+        if (!(stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem)) return false;
+
+        net.minecraft.world.level.Level level = drone.level();
+        if (!level.getBlockState(node.placement()).canBeReplaced()) return false;
+
+        net.minecraft.world.entity.player.Player fakePlayer = null;
+        if (!level.isClientSide() && level instanceof net.minecraft.server.level.ServerLevel sl) {
+            fakePlayer = net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(sl);
+            fakePlayer.setXRot(drone.getXRot());
+            fakePlayer.setYRot(drone.getYRot());
+        }
+
+        var context = new net.minecraft.world.item.context.BlockPlaceContext(
+                level,
+                fakePlayer,
+                net.minecraft.world.InteractionHand.MAIN_HAND,
+                stack,
+                new net.minecraft.world.phys.BlockHitResult(
+                        net.minecraft.world.phys.Vec3.atCenterOf(node.support()),
+                        node.face(),
+                        node.support(),
+                        false
+                )
+        );
+
+        return blockItem.place(context).consumesAction();
+    }
+
+    /** Finds the first inventory slot with a suitable light block for the given position. */
+    private ItemStack findSuitableStack(BlockPos target) {
         for (int slot = 0; slot < drone.getInventory().getSlots(); slot++) {
             ItemStack stack = drone.getInventory().getStackInSlot(slot);
-            if (PathLighterPlanner.isSuitableLightBlock(stack, drone.level(), target)
-                    && drone.level().getBlockState(target).canBeReplaced()) {
+            if (PathLighterPlanner.isSuitableLightBlock(stack, drone.level(), target)) {
                 return stack;
             }
         }
-        return ItemStack.EMPTY;
+        return net.minecraft.world.item.ItemStack.EMPTY;
     }
 
     private void advanceNode() {

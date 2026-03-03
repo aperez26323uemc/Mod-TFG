@@ -13,7 +13,7 @@ public final class ModKeys {
     public static final int NODE_SPACING = 7;
     public static final int NODE_LIGHT_THRESHOLD = 5;
     public static final int SUITABLE_LIGHT_EMISSION = 14;
-    public static final int NODE_DEVIATION_RADIUS = 5;
+    public static final int NODE_DEVIATION_RADIUS = 3;
     public static final long KEY_RELEASE_COOLDOWN_MS = 1_000L;
     public static final int NODE_TIMEOUT_TICKS = 1200;
     public static final int WALL_HEIGHT_BLOCKS = 4;

@@ -3,6 +3,7 @@ package com.uemc.path_lighter_drone.planner;
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import com.uemc.path_lighter_drone.ModKeys;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -42,7 +43,7 @@ public final class PathLighterPlanner {
             return Optional.empty();
         }
 
-        List<BlockPos> placements = evaluatePlacements(level, nodes, drone);
+        List<PathLightingTask.Node> placements = evaluatePlacements(level, nodes, drone);
         if (placements.isEmpty()) {
             return Optional.empty();
         }
@@ -195,92 +196,126 @@ public final class PathLighterPlanner {
         }
     }
 
-    private static List<BlockPos> evaluatePlacements(Level level, List<BlockPos> nodes, DroneEntity drone) {
-        List<BlockPos> placements = new ArrayList<>();
+    private static List<PathLightingTask.Node> evaluatePlacements(Level level, List<BlockPos> nodes, DroneEntity drone) {
+        List<PathLightingTask.Node> placements = new ArrayList<>();
         for (BlockPos node : nodes) {
             BlockPos air = node.above();
-            if (!needsLight(level, air)) {
-                continue;
-            }
-
-            Optional<BlockPos> valid = findValidPlacement(level, air, drone);
-            valid.ifPresent(placements::add);
+            if (!needsLight(level, air)) continue;
+            findValidPlacement(level, air, drone).ifPresent(placements::add);
         }
         return placements;
     }
 
-    private static boolean needsLight(Level level, BlockPos pos) {
-        if (!level.getFluidState(pos.below()).isEmpty() || !level.getFluidState(pos).isEmpty()) {
-            return false;
-        }
-        return level.getMaxLocalRawBrightness(pos) < ModKeys.NODE_LIGHT_THRESHOLD;
-    }
+    /**
+     * Tries the ideal air position first, then expands outward up to NODE_DEVIATION_RADIUS.
+     * Picks the geometrically closest valid candidate.
+     */
+    private static Optional<PathLightingTask.Node> findValidPlacement(Level level, BlockPos center, DroneEntity drone) {
+        Optional<PathLightingTask.Node> direct = tryPlacementAt(level, center, drone);
+        if (direct.isPresent()) return direct;
 
-    private static Optional<BlockPos> findValidPlacement(Level level, BlockPos center, DroneEntity drone) {
-        if (canAnySuitableBlockBePlaced(level, center, drone)) {
-            return Optional.of(center);
-        }
-
-        BlockPos bestCandidate = null;
-        double bestDistanceSquared = Double.MAX_VALUE;
+        PathLightingTask.Node best = null;
+        double bestDistSqr = Double.MAX_VALUE;
         int radius = ModKeys.NODE_DEVIATION_RADIUS;
 
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dz = -radius; dz <= radius; dz++) {
-                if (dx == 0 && dz == 0) {
-                    continue;
-                }
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
 
-                double distanceSquared = dx * dx + dz * dz;
-                if (distanceSquared >= bestDistanceSquared) {
-                    continue;
-                }
+                    BlockPos candidate = center.offset(dx, dy, dz);
+                    if (!needsLight(level, candidate)) continue;
 
-                BlockPos candidate = center.offset(dx, 0, dz);
-                if (canAnySuitableBlockBePlaced(level, candidate, drone)) {
-                    bestCandidate = candidate;
-                    bestDistanceSquared = distanceSquared;
+                    Optional<PathLightingTask.Node> node = tryPlacementAt(level, candidate, drone);
+                    if (node.isPresent()) {
+                        double distSqr = dx * dx + (double) dy * dy + dz * dz;
+                        if (distSqr < bestDistSqr) {
+                            best = node.get();
+                            bestDistSqr = distSqr;
+                        }
+                    }
                 }
             }
         }
 
-        return Optional.ofNullable(bestCandidate);
+        return Optional.ofNullable(best);
     }
 
-    private static boolean canAnySuitableBlockBePlaced(Level level, BlockPos pos, DroneEntity drone) {
-        if (!level.getBlockState(pos).canBeReplaced()) {
-            return false;
-        }
+    /**
+     * Searches for a valid placement around {@code pos}.
+     *
+     * <p>Priority order:
+     * <ol>
+     * <li>Block below (standard floor torch, or full blocks like Glowstone).</li>
+     * <li>The four horizontal neighbours (wall torches).</li>
+     * </ol>
+     */
+    private static Optional<PathLightingTask.Node> tryPlacementAt(Level level, BlockPos pos, DroneEntity drone) {
+        if (!level.getBlockState(pos).canBeReplaced()) return Optional.empty();
 
         for (int slot = 0; slot < drone.getInventory().getSlots(); slot++) {
             ItemStack stack = drone.getInventory().getStackInSlot(slot);
-            if (!isSuitableLightBlock(stack, level, pos)) {
-                continue;
+            if (!isSuitableLightBlock(stack, level, pos)) continue;
+
+            BlockPos floor = pos.below();
+            if (canPlaceOnFace(level, floor, floor, Direction.UP, stack)) {
+                return Optional.of(new PathLightingTask.Node(pos, floor, Direction.UP));
             }
 
-            if (canPlaceAt(level, pos, stack)) {
-                return true;
+            for (Direction dirToSolid : Direction.Plane.HORIZONTAL) {
+                BlockPos wall = pos.relative(dirToSolid);
+                Direction faceOnSupport = dirToSolid.getOpposite();
+
+                if (canPlaceOnFace(level, pos, wall, faceOnSupport, stack)) {
+                    return Optional.of(new PathLightingTask.Node(pos, wall, faceOnSupport));
+                }
             }
         }
 
-        return false;
+        return Optional.empty();
     }
 
-    private static boolean canPlaceAt(Level level, BlockPos pos, ItemStack stack) {
-        if (!(stack.getItem() instanceof BlockItem blockItem)) {
-            return false;
-        }
+    /**
+     * Validates that {@code stack} can be placed at {@code targetPos} by clicking
+     * {@code faceOnSupport} on {@code supportPos}.
+     *
+     * <p>The {@link net.minecraft.world.item.context.BlockPlaceContext} is built from
+     * the support block, not the target, so Minecraft's own attachment logic (wall
+     * torches, banners, etc.) resolves correctly.</p>
+     */
+    private static boolean canPlaceOnFace(
+            Level level,
+            BlockPos targetPos,
+            BlockPos supportPos,
+            Direction faceOnSupport,
+            ItemStack stack
+    ) {
+        if (!(stack.getItem() instanceof BlockItem blockItem)) return false;
 
-        Player fakePlayer = level instanceof net.minecraft.server.level.ServerLevel serverLevel
-                ? net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(serverLevel)
+        Player fakePlayer = level instanceof net.minecraft.server.level.ServerLevel sl
+                ? net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(sl)
                 : null;
 
-        BlockPos clickedPos = pos.below();
         var context = new net.minecraft.world.item.context.BlockPlaceContext(
                 level, fakePlayer, net.minecraft.world.InteractionHand.MAIN_HAND, stack,
-                new BlockHitResult(Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, clickedPos, false)
+                new BlockHitResult(Vec3.atCenterOf(supportPos), faceOnSupport, supportPos, false)
         );
-        return blockItem.getBlock().getStateForPlacement(context) != null;
+
+        BlockState state = blockItem.getBlock().getStateForPlacement(context);
+        if (state == null) return false;
+
+        if (!level.getFluidState(targetPos).isEmpty()) {
+            if (state.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED)) {
+                return true;
+            }
+            return state.isCollisionShapeFullBlock(level, targetPos);
+        }
+
+        return true;
+    }
+
+    private static boolean needsLight(Level level, BlockPos pos) {
+        return level.getMaxLocalRawBrightness(pos) < ModKeys.NODE_LIGHT_THRESHOLD;
     }
 
     private static List<BlockPos> bresenham2d(int x0, int z0, int x1, int z1) {

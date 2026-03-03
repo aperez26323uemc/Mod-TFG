@@ -464,7 +464,6 @@ public class DroneAiLogic {
             player.setYRot(drone.getYRot());
         }
 
-        // Simulamos hacer clic en la cara opuesta a la dirección de colocación
         BlockPos clickedPos = pos.relative(face.getOpposite());
         BlockPlaceContext context = new BlockPlaceContext(
                 level, player, InteractionHand.MAIN_HAND, stack,
