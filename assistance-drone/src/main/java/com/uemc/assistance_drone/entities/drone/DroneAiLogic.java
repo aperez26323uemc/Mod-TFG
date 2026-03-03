@@ -439,7 +439,15 @@ public class DroneAiLogic {
         return picked;
     }
 
+    /**
+     * @deprecated Use {@link #placeBlock(BlockPos, ItemStack, Direction)} instead.
+     */
+    @Deprecated
     public boolean placeBlock(BlockPos pos, ItemStack stack) {
+        return placeBlock(pos, stack, Direction.UP);
+    }
+
+    public boolean placeBlock(BlockPos pos, ItemStack stack, Direction face) {
         if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) {
             return false;
         }
@@ -456,12 +464,17 @@ public class DroneAiLogic {
             player.setYRot(drone.getYRot());
         }
 
+        // Simulamos hacer clic en la cara opuesta a la dirección de colocación
+        BlockPos clickedPos = pos.relative(face.getOpposite());
         BlockPlaceContext context = new BlockPlaceContext(
                 level, player, InteractionHand.MAIN_HAND, stack,
-                new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos.below(), false)
+                new BlockHitResult(Vec3.atCenterOf(pos), face, clickedPos, false)
         );
 
-        return blockItem.place(context).consumesAction();
+        if (blockItem.getBlock().getStateForPlacement(context) != null) {
+            return blockItem.place(context).consumesAction();
+        }
+        return false;
     }
 
     public BlockPos getObstructionBlock(BlockPos targetPos) {
