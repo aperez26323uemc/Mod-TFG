@@ -11,4 +11,4 @@ cd path_lighter_drone
 
 ## Dependencias
 
-- `assistance_drone` >= `1.0.0`
+- `assistance_drone` >= `1.1.0`
