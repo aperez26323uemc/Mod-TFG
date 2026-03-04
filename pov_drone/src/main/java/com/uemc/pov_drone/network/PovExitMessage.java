@@ -15,7 +15,8 @@ public record PovExitMessage() implements CustomPacketPayload {
     public static final Type<PovExitMessage> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(PovDrone.MODID, ModKeys.EXIT_PACKET));
 
-    public static final StreamCodec<ByteBuf, PovExitMessage> STREAM_CODEC = StreamCodec.unit(new PovExitMessage());
+    public static final StreamCodec<ByteBuf, PovExitMessage> STREAM_CODEC =
+            StreamCodec.unit(new PovExitMessage());
 
     @Override
     public Type<PovExitMessage> type() {
@@ -25,7 +26,9 @@ public record PovExitMessage() implements CustomPacketPayload {
     public static void handle(PovExitMessage message, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
-                PovSessionManager.tryExitFromBodyHit(player);
+                // The client already validated the hit against the player body
+                // (AABB.clip from the drone's POV), so we trust it here.
+                PovSessionManager.stop(player, false, false);
             }
         });
     }

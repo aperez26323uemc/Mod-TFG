@@ -2,8 +2,11 @@
   "required": true,
   "package": "com.uemc.pov_drone.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [
-    "KeyboardHandlerMixin"
+  "mixins": [],
+  "client": [
+    "KeyboardHandlerMixin",
+    "LocalPlayerMixin",
+    "MouseHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -4,6 +4,7 @@ import com.uemc.assistance_drone.entities.drone.DroneEntity;
 import com.uemc.pov_drone.ModKeys;
 import com.uemc.pov_drone.network.PovInputMessage;
 import com.uemc.pov_drone.network.PovSessionMessage;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
@@ -72,10 +73,10 @@ public final class PovSessionManager {
         if (forward.lengthSqr() < 1.0E-4D) {
             forward = Vec3.ZERO;
         }
-        Vec3 right = new Vec3(-forward.z, 0.0D, forward.x);
+        Vec3 left = new Vec3(forward.z, 0.0D, -forward.x);
 
         Vec3 velocity = forward.scale(input.forward())
-                .add(right.scale(input.strafe()))
+                .add(left.scale(input.strafe()))
                 .add(0.0D, input.vertical(), 0.0D)
                 .normalize()
                 .scale(ModKeys.DRONE_SPEED_BLOCKS_PER_TICK);
@@ -109,7 +110,10 @@ public final class PovSessionManager {
         }
 
         if (session.introTicks > 0) {
-            player.displayClientMessage(Component.translatable(ModKeys.ACTIONBAR_INTRO), true);
+            player.displayClientMessage(Component.translatable(
+                    ModKeys.ACTIONBAR_INTRO,
+                    Minecraft.getInstance().options.keyAttack.getTranslatedKeyMessage()
+            ), true);
             session.introTicks--;
         }
     }
