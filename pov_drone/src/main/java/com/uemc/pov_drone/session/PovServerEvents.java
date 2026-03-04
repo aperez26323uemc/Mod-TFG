@@ -8,6 +8,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.AttackEntityEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 
@@ -50,16 +51,20 @@ public final class PovServerEvents {
         }
     }
 
-    /**
-     * Prevents the frozen player body from breaking blocks while in POV mode.
-     * The client suppresses mouse clicks, but in creative mode the server may
-     * still process queued attack packets before the session state propagates.
-     */
     @SubscribeEvent
     public static void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         if (event.getEntity() instanceof ServerPlayer player
                 && PovSessionManager.hasSession(player)) {
             event.setCanceled(true);
+        }
+    }
+
+    // Fires before player data is saved on logout, ensuring the drone's state
+    // is persisted as FOLLOW rather than remaining in the orphaned IDLE+NoAI state.
+    @SubscribeEvent
+    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            PovSessionManager.stop(player, true, false);
         }
     }
 }

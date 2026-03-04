@@ -10,6 +10,7 @@ public final class ModKeys {
     public static final int INTRO_MESSAGE_TICKS = 100;
     public static final double DRONE_SPEED_BLOCKS_PER_TICK = 0.45D;
     public static final int WARNING_MESSAGE_COOLDOWN_TICKS = 20;
+    public static final double PLAYER_AABB_INFLATE = 0.3D;
 
     public static final String INPUT_PACKET = "pov_input";
     public static final String EXIT_PACKET = "pov_exit";

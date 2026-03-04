@@ -25,8 +25,6 @@ import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.Optional;
-
 @EventBusSubscriber(modid = PovDrone.MODID, value = Dist.CLIENT)
 public final class PovClientEvents {
 
@@ -70,22 +68,17 @@ public final class PovClientEvents {
         if (mc.player == null || !PovClientController.isActive()) {
             return;
         }
-        // tryBindCamera also pushes droneYaw/dronePitch onto the entity for
-        // responsive rendering before the server round-trip comes back.
+        mc.options.keyAttack.consumeClick();
+
         if (!PovClientController.tryBindCamera()) {
             return;
         }
 
-        float forward  = axis(mc.options.keyUp.isDown(),    mc.options.keyDown.isDown());
-        float strafe   = axis(mc.options.keyLeft.isDown(),  mc.options.keyRight.isDown());
-        float vertical = axis(mc.options.keyJump.isDown(),  mc.options.keyShift.isDown());
+        float forward  = axis(mc.options.keyUp.isDown(),   mc.options.keyDown.isDown());
+        float strafe   = axis(mc.options.keyLeft.isDown(), mc.options.keyRight.isDown());
+        float vertical = axis(mc.options.keyJump.isDown(), mc.options.keyShift.isDown());
 
-        // yaw/pitch are now taken from PovClientController, not mc.player
         PovClientController.sendInput(strafe, forward, vertical);
-    }
-
-    private static float axis(boolean positive, boolean negative) {
-        return positive == negative ? 0.0F : (positive ? 1.0F : -1.0F);
     }
 
     @SubscribeEvent
@@ -94,33 +87,18 @@ public final class PovClientEvents {
         if (!PovClientController.isActive() || mc.player == null || mc.level == null) {
             return;
         }
-
-        if (event.getButton() == GLFW.GLFW_MOUSE_BUTTON_LEFT
-                && event.getAction() == GLFW.GLFW_PRESS) {
-
-            // The camera entity is the drone, so mc.hitResult is computed from
-            // the player's frozen body – it can never self-intersect.
-            // Instead we raycast manually from the drone's perspective using our
-            // locally-tracked look direction.
-            Entity drone = mc.level.getEntity(PovClientController.getControlledDroneId());
-            if (drone != null) {
-                Vec3 eyePos = drone.getEyePosition();
-                Vec3 look   = Vec3.directionFromRotation(
-                        PovClientController.getDronePitch(),
-                        PovClientController.getDroneYaw());
-                double range  = mc.player.entityInteractionRange();
-                Vec3 endPos   = eyePos.add(look.scale(range));
-
-                // Slightly inflate the bounding box so it is easy to aim at
-                AABB playerBox = mc.player.getBoundingBox().inflate(0.3D);
-                Optional<Vec3> hit = playerBox.clip(eyePos, endPos);
-                if (hit.isPresent()) {
-                    PovClientController.requestExit();
-                }
-            }
+        if (mc.screen != null) {
+            return;
         }
-
+        if (event.getAction() == GLFW.GLFW_PRESS
+                && mc.options.keyAttack.matchesMouse(event.getButton())) {
+            PovClientController.tryExitByRaycast();
+        }
         event.setCanceled(true);
+    }
+
+    private static float axis(boolean positive, boolean negative) {
+        return positive == negative ? 0.0F : (positive ? 1.0F : -1.0F);
     }
 
     @SubscribeEvent

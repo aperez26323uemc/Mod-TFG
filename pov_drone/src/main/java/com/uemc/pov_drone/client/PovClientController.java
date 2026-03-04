@@ -1,12 +1,18 @@
 package com.uemc.pov_drone.client;
 
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
-import com.uemc.pov_drone.network.PovInputMessage;
+import com.uemc.pov_drone.ModKeys;
 import com.uemc.pov_drone.network.PovExitMessage;
+import com.uemc.pov_drone.network.PovInputMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.Optional;
 
 public final class PovClientController {
 
@@ -22,6 +28,7 @@ public final class PovClientController {
     public static void start(int droneId) {
         controlledDroneId = droneId;
         droneRotationInitialized = false;
+        Minecraft.getInstance().options.keyAttack.setDown(false);
     }
 
     public static void stop() {
@@ -64,6 +71,30 @@ public final class PovClientController {
     }
 
     /**
+     * Raycasts from the drone's eye toward the locally-tracked look direction.
+     * Sends an exit packet if the player's body AABB is hit. No-op when the
+     * drone entity is absent from the client level.
+     */
+    public static void tryExitByRaycast() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || mc.player == null) {
+            return;
+        }
+        Entity drone = mc.level.getEntity(controlledDroneId);
+        if (drone == null) {
+            return;
+        }
+        Vec3 eyePos = drone.getEyePosition();
+        Vec3 look = Vec3.directionFromRotation(dronePitch, droneYaw);
+        Vec3 endPos = eyePos.add(look.scale(mc.player.entityInteractionRange()));
+        AABB playerBox = mc.player.getBoundingBox().inflate(ModKeys.PLAYER_AABB_INFLATE);
+        Optional<Vec3> hit = playerBox.clip(eyePos, endPos);
+        if (hit.isPresent()) {
+            requestExit();
+        }
+    }
+
+    /**
      * Tries to bind the camera to the controlled drone.
      * On first call initialises droneYaw/dronePitch from the entity so the
      * view does not snap.
@@ -88,8 +119,13 @@ public final class PovClientController {
             droneRotationInitialized = true;
         }
 
+        entity.yRotO = droneYaw;
+        entity.xRotO = dronePitch;
         entity.setYRot(droneYaw);
         entity.setXRot(dronePitch);
+        if (entity instanceof LivingEntity living) {
+            living.yBodyRot = droneYaw;
+        }
 
         mc.setCameraEntity(entity);
         return true;
