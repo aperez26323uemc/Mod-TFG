@@ -53,6 +53,9 @@ public class DroneFluidHandlerGoal extends Goal {
     private static final double COLLISION_TOLERANCE = 0.1;
     private static final int INFINITE_SOURCE_THRESHOLD = 2;
     private static final int BORDER_THICKNESS = 2;
+    private static final double TARGET_PROXIMITY_DISTANCE_SQR = 1.0D;
+    private static final int TARGET_PROXIMITY_BLACKLIST_TICKS = 100;
+    private static final int TEMP_BLACKLIST_DURATION_TICKS = 200;
 
     private static final List<Direction> TRACE_DIRECTIONS = List.of(
             Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST
@@ -66,11 +69,14 @@ public class DroneFluidHandlerGoal extends Goal {
     private final Predicate<String> activationCondition;
 
     private final Set<BlockPos> fluidBlacklist = new HashSet<>();
+    private final Map<BlockPos, Integer> temporaryFluidBlacklist = new HashMap<>();
     private final PriorityQueue<FluidThreat> fluidQueue = new PriorityQueue<>();
     private final Map<Long, Boolean> sectionSkipCache = new HashMap<>();
 
     private BlockPos targetPos;
     private int scanCooldown = SCAN_COOLDOWN_TICKS;
+    private BlockPos proximityTrackedTarget;
+    private int proximityTicks;
 
     /* Resume state when scanning incrementally */
     private int resumeX;
@@ -125,6 +131,7 @@ public class DroneFluidHandlerGoal extends Goal {
     @Override
     public void stop() {
         targetPos = null;
+        resetProximityTracking();
         drone.getNavigation().stop();
     }
 
@@ -135,9 +142,12 @@ public class DroneFluidHandlerGoal extends Goal {
 
     @Override
     public void tick() {
+        purgeExpiredTemporaryBlacklist();
         if (targetPos == null) return;
 
         drone.getLookControl().setLookAt(Vec3.atCenterOf(targetPos));
+
+        if (handleProximitySafetyCheck()) return;
 
         if (handleDroneObstruction()) return;
         if (handleTargetApproach()) return;
@@ -199,6 +209,35 @@ public class DroneFluidHandlerGoal extends Goal {
         }
 
         targetPos = null;
+        resetProximityTracking();
+    }
+
+    private boolean handleProximitySafetyCheck() {
+        if (!Objects.equals(proximityTrackedTarget, targetPos)) {
+            proximityTrackedTarget = targetPos;
+            proximityTicks = 0;
+        }
+
+        double distanceToTarget = drone.position().distanceToSqr(Vec3.atCenterOf(targetPos));
+        if (distanceToTarget <= TARGET_PROXIMITY_DISTANCE_SQR) {
+            proximityTicks++;
+            if (proximityTicks >= TARGET_PROXIMITY_BLACKLIST_TICKS) {
+                blacklistTemporarily(targetPos, TEMP_BLACKLIST_DURATION_TICKS);
+                targetPos = null;
+                drone.getNavigation().stop();
+                resetProximityTracking();
+                return true;
+            }
+            return false;
+        }
+
+        proximityTicks = 0;
+        return false;
+    }
+
+    private void resetProximityTracking() {
+        proximityTrackedTarget = null;
+        proximityTicks = 0;
     }
 
     /* ----------------------
@@ -208,7 +247,7 @@ public class DroneFluidHandlerGoal extends Goal {
     private BlockPos getNextThreatFromQueue() {
         while (!fluidQueue.isEmpty()) {
             FluidThreat threat = fluidQueue.poll();
-            if (!fluidBlacklist.contains(threat.pos)) return threat.pos;
+            if (!isCurrentlyBlacklisted(threat.pos)) return threat.pos;
         }
         return null;
     }
@@ -554,10 +593,33 @@ public class DroneFluidHandlerGoal extends Goal {
     }
 
     private boolean isBlacklistedAndBlocked(BlockPos pos) {
+        if (isTemporarilyBlacklisted(pos)) return true;
         if (!fluidBlacklist.contains(pos)) return false;
         if (!drone.getLogic().isBlockAccessible(pos)) return true;
         fluidBlacklist.remove(pos);
         return false;
+    }
+
+    private boolean isCurrentlyBlacklisted(BlockPos pos) {
+        if (isTemporarilyBlacklisted(pos)) return true;
+        return fluidBlacklist.contains(pos);
+    }
+
+    private boolean isTemporarilyBlacklisted(BlockPos pos) {
+        Integer expiryTick = temporaryFluidBlacklist.get(pos);
+        if (expiryTick == null) return false;
+        if (drone.tickCount < expiryTick) return true;
+        temporaryFluidBlacklist.remove(pos);
+        return false;
+    }
+
+    private void purgeExpiredTemporaryBlacklist() {
+        if (temporaryFluidBlacklist.isEmpty()) return;
+        temporaryFluidBlacklist.entrySet().removeIf(entry -> drone.tickCount >= entry.getValue());
+    }
+
+    private void blacklistTemporarily(BlockPos pos, int durationTicks) {
+        temporaryFluidBlacklist.put(pos, drone.tickCount + durationTicks);
     }
 
     private void blacklistPositionAndAdjacent(BlockPos pos) {
@@ -567,7 +629,9 @@ public class DroneFluidHandlerGoal extends Goal {
 
     private void removeFromBlacklistWithAdjacent(BlockPos pos) {
         fluidBlacklist.remove(pos);
+        temporaryFluidBlacklist.remove(pos);
         for (Direction dir : Direction.values()) fluidBlacklist.remove(pos.relative(dir));
+        for (Direction dir : Direction.values()) temporaryFluidBlacklist.remove(pos.relative(dir));
     }
 
     /* ----------------------
