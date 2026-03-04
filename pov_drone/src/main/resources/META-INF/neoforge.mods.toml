@@ -7,7 +7,7 @@ modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
 description='''
-Addon for Assistance Drone: allows follow drones to place lighting along player paths.
+POV Drone addon for Assistance Drone.
 '''
 
 [[mixins]]
