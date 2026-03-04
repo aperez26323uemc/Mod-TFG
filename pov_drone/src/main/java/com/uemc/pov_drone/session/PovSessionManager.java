@@ -13,6 +13,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 
 import java.util.Map;
 import java.util.UUID;
@@ -145,7 +146,7 @@ public final class PovSessionManager {
 
         Vec3 eyePos = player.getEyePosition();
         Vec3 endPos = eyePos.add(player.getLookAngle().scale(player.entityInteractionRange()));
-        EntityHitResult hit = net.minecraft.world.phys.ProjectileUtil.getEntityHitResult(
+        EntityHitResult hit = ProjectileUtil.getEntityHitResult(
                 player,
                 eyePos,
                 endPos,

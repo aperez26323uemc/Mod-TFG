@@ -107,7 +107,7 @@ dependencies {
     // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
     // The group id is ignored when searching -- in this case, it is "blank"
     // implementation "blank:coolmod-${mc_version}:${coolmod_version}"
-    compileOnly files("../assistance-drone/build/libs/assistance_drone-1.1.0.jar")
+    implementation files("libs/assistance_drone-1.1.0.jar")
 
     // Example mod dependency using a file as dependency
     // implementation files("libs/coolmod-${mc_version}-${coolmod_version}.jar")

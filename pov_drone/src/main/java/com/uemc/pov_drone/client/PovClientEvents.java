@@ -104,7 +104,7 @@ public final class PovClientEvents {
         ).move(-cam.x, -cam.y, -cam.z);
 
         RenderSystem.enableBlend();
-        LevelRenderer.renderLineBox(event.getPoseStack(), event.getLevelRenderer().renderBuffers().bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.lines()), box, 1.0F, 0.2F, 0.2F, 0.8F);
+        LevelRenderer.renderLineBox(event.getPoseStack(), mc.renderBuffers().bufferSource().getBuffer(net.minecraft.client.renderer.RenderType.lines()), box, 1.0F, 0.2F, 0.2F, 0.8F);
         RenderSystem.disableBlend();
     }
 
