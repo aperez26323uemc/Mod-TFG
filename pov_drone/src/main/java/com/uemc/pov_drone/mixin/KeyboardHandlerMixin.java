@@ -16,7 +16,7 @@ public abstract class KeyboardHandlerMixin {
         if (!PovClientController.isActive()) {
             return;
         }
-        if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_F3) {
+        if (key == GLFW.GLFW_KEY_ESCAPE || key == GLFW.GLFW_KEY_F3 || isFunctionKey(key)) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
@@ -34,5 +34,9 @@ public abstract class KeyboardHandlerMixin {
         if (!movementKey) {
             ci.cancel();
         }
+    }
+
+    private static boolean isFunctionKey(int key) {
+        return key >= GLFW.GLFW_KEY_F1 && key <= GLFW.GLFW_KEY_F12;
     }
 }

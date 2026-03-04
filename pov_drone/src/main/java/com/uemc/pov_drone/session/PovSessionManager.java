@@ -34,7 +34,7 @@ public final class PovSessionManager {
         if (hasSession(player) || !player.getUUID().equals(drone.getOwnerUUID())) {
             return;
         }
-        Session session = new Session(drone.getId(), player.position());
+        Session session = new Session(drone.getId(), player.position(), player.getYRot(), player.getXRot(), player.getYHeadRot());
         SESSIONS.put(player.getUUID(), session);
         drone.setNoAi(true);
         PacketDistributor.sendToPlayer(player, new PovSessionMessage(true, drone.getId(), ModKeys.INTRO_MESSAGE_TICKS));
@@ -61,6 +61,10 @@ public final class PovSessionManager {
 
         player.setDeltaMovement(Vec3.ZERO);
         player.hurtMarked = true;
+        player.setYRot(session.bodyYaw);
+        player.setXRot(session.bodyPitch);
+        player.setYHeadRot(session.bodyHeadYaw);
+        player.setYBodyRot(session.bodyYaw);
 
         PovInputMessage input = session.input;
         Vec3 look = Vec3.directionFromRotation(input.pitch(), input.yaw());
@@ -163,13 +167,19 @@ public final class PovSessionManager {
     private static final class Session {
         private final int droneId;
         private final Vec3 anchor;
+        private final float bodyYaw;
+        private final float bodyPitch;
+        private final float bodyHeadYaw;
         private PovInputMessage input = new PovInputMessage(0.0F, 0.0F, 0.0F, 0.0F, 0.0F);
         private int introTicks = ModKeys.INTRO_MESSAGE_TICKS;
         private int lastWarningTick;
 
-        private Session(int droneId, Vec3 anchor) {
+        private Session(int droneId, Vec3 anchor, float bodyYaw, float bodyPitch, float bodyHeadYaw) {
             this.droneId = droneId;
             this.anchor = anchor;
+            this.bodyYaw = bodyYaw;
+            this.bodyPitch = bodyPitch;
+            this.bodyHeadYaw = bodyHeadYaw;
         }
     }
 }
