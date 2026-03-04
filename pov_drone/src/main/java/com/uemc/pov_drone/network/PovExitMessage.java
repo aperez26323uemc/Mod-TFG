@@ -9,6 +9,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
+import org.jetbrains.annotations.NotNull;
 
 public record PovExitMessage() implements CustomPacketPayload {
 
@@ -19,16 +20,16 @@ public record PovExitMessage() implements CustomPacketPayload {
             StreamCodec.unit(new PovExitMessage());
 
     @Override
-    public Type<PovExitMessage> type() {
+    public @NotNull Type<PovExitMessage> type() {
         return TYPE;
     }
 
-    public static void handle(PovExitMessage message, IPayloadContext context) {
+    public static void handle(IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
                 // The client already validated the hit against the player body
                 // (AABB.clip from the drone's POV), so we trust it here.
-                PovSessionManager.stop(player, false, false);
+                PovSessionManager.stop(player, false);
             }
         });
     }

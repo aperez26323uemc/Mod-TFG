@@ -10,6 +10,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
+import org.jetbrains.annotations.NotNull;
 
 public record PovSessionMessage(boolean active, int droneId, int introTicks) implements CustomPacketPayload {
 
@@ -17,14 +18,14 @@ public record PovSessionMessage(boolean active, int droneId, int introTicks) imp
             new Type<>(ResourceLocation.fromNamespaceAndPath(PovDrone.MODID, ModKeys.SESSION_PACKET));
 
     public static final StreamCodec<ByteBuf, PovSessionMessage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.BOOL, PovSessionMessage::active,
+            ByteBufCodecs.BOOL,    PovSessionMessage::active,
             ByteBufCodecs.VAR_INT, PovSessionMessage::droneId,
             ByteBufCodecs.VAR_INT, PovSessionMessage::introTicks,
             PovSessionMessage::new
     );
 
     @Override
-    public Type<PovSessionMessage> type() {
+    public @NotNull Type<PovSessionMessage> type() {
         return TYPE;
     }
 
@@ -32,7 +33,8 @@ public record PovSessionMessage(boolean active, int droneId, int introTicks) imp
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
             if (message.active()) {
-                PovClientController.start(message.droneId());
+                // Pass introTicks so the client can display the keybind hint locally.
+                PovClientController.start(message.droneId(), message.introTicks());
             } else {
                 PovClientController.stop();
                 if (mc.player != null) {

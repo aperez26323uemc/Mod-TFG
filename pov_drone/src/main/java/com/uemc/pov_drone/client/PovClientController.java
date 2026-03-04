@@ -18,21 +18,30 @@ public final class PovClientController {
 
     private static int controlledDroneId = -1;
 
-    private static float droneYaw = 0.0F;
+    private static float droneYaw   = 0.0F;
     private static float dronePitch = 0.0F;
     private static boolean droneRotationInitialized = false;
+
+    private static int introTicks = 0;
 
     private PovClientController() {
     }
 
-    public static void start(int droneId) {
-        controlledDroneId = droneId;
+    // -------------------------------------------------------------------------
+    // Session lifecycle
+    // -------------------------------------------------------------------------
+
+    /** Called when the server confirms a session has started. */
+    public static void start(int droneId, int introTicksFromServer) {
+        controlledDroneId        = droneId;
+        introTicks               = introTicksFromServer;
         droneRotationInitialized = false;
         Minecraft.getInstance().options.keyAttack.setDown(false);
     }
 
     public static void stop() {
-        controlledDroneId = -1;
+        controlledDroneId        = -1;
+        introTicks               = 0;
         droneRotationInitialized = false;
     }
 
@@ -40,26 +49,36 @@ public final class PovClientController {
         return controlledDroneId >= 0;
     }
 
-    public static int getControlledDroneId() {
-        return controlledDroneId;
+    // -------------------------------------------------------------------------
+    // Intro hint
+    // -------------------------------------------------------------------------
+
+    public static int getIntroTicks() {
+        return introTicks;
     }
 
-    public static float getDroneYaw() {
-        return droneYaw;
+    public static void decrementIntroTicks() {
+        if (introTicks > 0) {
+            introTicks--;
+        }
     }
 
-    public static float getDronePitch() {
-        return dronePitch;
-    }
+    // -------------------------------------------------------------------------
+    // Camera / rotation
+    // -------------------------------------------------------------------------
 
     /**
      * Called from MouseHandlerMixin instead of applying rotation to the player.
-     * Sensitivity scaling already applied before calling this.
+     * Sensitivity scaling is already applied by vanilla before this is called.
      */
     public static void applyMouseDelta(float deltaYaw, float deltaPitch) {
-        droneYaw += (deltaYaw * 0.15F);
-        dronePitch = Mth.clamp(dronePitch + (deltaPitch * 0.15F), -90.0F, 90.0F);
+        droneYaw += deltaYaw   * 0.15F;
+        dronePitch = Mth.clamp(dronePitch + deltaPitch * 0.15F, -90.0F, 90.0F);
     }
+
+    // -------------------------------------------------------------------------
+    // Network
+    // -------------------------------------------------------------------------
 
     public static void sendInput(float strafe, float forward, float vertical) {
         PacketDistributor.sendToServer(
@@ -70,10 +89,14 @@ public final class PovClientController {
         PacketDistributor.sendToServer(new PovExitMessage());
     }
 
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
     /**
      * Raycasts from the drone's eye toward the locally-tracked look direction.
-     * Sends an exit packet if the player's body AABB is hit. No-op when the
-     * drone entity is absent from the client level.
+     * Sends an exit packet if the player's body AABB is hit.
+     * No-op when the drone entity is absent from the client level.
      */
     public static void tryExitByRaycast() {
         Minecraft mc = Minecraft.getInstance();
@@ -85,7 +108,7 @@ public final class PovClientController {
             return;
         }
         Vec3 eyePos = drone.getEyePosition();
-        Vec3 look = Vec3.directionFromRotation(dronePitch, droneYaw);
+        Vec3 look   = Vec3.directionFromRotation(dronePitch, droneYaw);
         Vec3 endPos = eyePos.add(look.scale(mc.player.entityInteractionRange()));
         AABB playerBox = mc.player.getBoundingBox().inflate(ModKeys.PLAYER_AABB_INFLATE);
         Optional<Vec3> hit = playerBox.clip(eyePos, endPos);
@@ -114,7 +137,7 @@ public final class PovClientController {
         }
 
         if (!droneRotationInitialized) {
-            droneYaw = entity.getYRot();
+            droneYaw   = entity.getYRot();
             dronePitch = entity.getXRot();
             droneRotationInitialized = true;
         }

@@ -15,7 +15,7 @@ public final class PovNetworking {
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar(PovDrone.MODID);
         registrar.playToServer(PovInputMessage.TYPE, PovInputMessage.STREAM_CODEC, PovInputMessage::handle);
-        registrar.playToServer(PovExitMessage.TYPE, PovExitMessage.STREAM_CODEC, PovExitMessage::handle);
+        registrar.playToServer(PovExitMessage.TYPE, PovExitMessage.STREAM_CODEC, (message, context) -> PovExitMessage.handle(context));
         registrar.playToClient(PovSessionMessage.TYPE, PovSessionMessage.STREAM_CODEC, PovSessionMessage::handle);
     }
 }

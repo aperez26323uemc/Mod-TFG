@@ -59,12 +59,12 @@ public final class PovServerEvents {
         }
     }
 
-    // Fires before player data is saved on logout, ensuring the drone's state
-    // is persisted as FOLLOW rather than remaining in the orphaned IDLE+NoAI state.
+    /** Ensures the drone's state is persisted as FOLLOW rather than remaining in the orphaned IDLE+NoAI state.
+    **/
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            PovSessionManager.stop(player, true, false);
+            PovSessionManager.stop(player, true);
         }
     }
 }
