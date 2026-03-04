@@ -32,7 +32,7 @@ public record PovSessionMessage(boolean active, int droneId, int introTicks) imp
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
             if (message.active()) {
-                PovClientController.start(message.droneId(), message.introTicks());
+                PovClientController.start(message.droneId());
             } else {
                 PovClientController.stop();
                 if (mc.player != null) {

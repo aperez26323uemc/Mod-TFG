@@ -1,7 +1,6 @@
 package com.uemc.pov_drone.client;
 
 import com.uemc.assistance_drone.entities.drone.DroneEntity;
-import com.uemc.pov_drone.ModKeys;
 import com.uemc.pov_drone.network.PovInputMessage;
 import com.uemc.pov_drone.network.PovExitMessage;
 import net.minecraft.client.Minecraft;
@@ -11,19 +10,16 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public final class PovClientController {
 
     private static int controlledDroneId = -1;
-    private static int introTicks;
 
     private PovClientController() {
     }
 
-    public static void start(int droneId, int messageTicks) {
+    public static void start(int droneId) {
         controlledDroneId = droneId;
-        introTicks = messageTicks;
     }
 
     public static void stop() {
         controlledDroneId = -1;
-        introTicks = 0;
     }
 
     public static boolean isActive() {

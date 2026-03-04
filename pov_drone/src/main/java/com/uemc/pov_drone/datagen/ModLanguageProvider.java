@@ -13,7 +13,7 @@ public class ModLanguageProvider extends LanguageProvider {
 
     @Override
     protected void addTranslations() {
-        add(ModKeys.ACTIONBAR_INTRO, "Haz click izquierdo en tu cuerpo para volver");
-        add(ModKeys.ACTIONBAR_TETHER_WARNING, "Límite de señal alcanzado");
+        add(ModKeys.ACTIONBAR_INTRO, "Left click your body to return");
+        add(ModKeys.ACTIONBAR_TETHER_WARNING, "Signal limit reached");
     }
 }
