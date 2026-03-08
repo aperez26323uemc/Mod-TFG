@@ -12,7 +12,7 @@ Mod base de NeoForge que añade el drone de asistencia y sistemas comunes para a
 ## Build local
 
 ```bash
-cd assistance-drone
+cd assistance_drone
 ./gradlew build
 ```
 
@@ -20,6 +20,6 @@ cd assistance-drone
 
 Este módulo es la dependencia principal de:
 
-- `farmer-drone`
+- `farmer_drone`
 - `path_lighter_drone`
-- `pickup-dumper`
+- `pickup_dumper`

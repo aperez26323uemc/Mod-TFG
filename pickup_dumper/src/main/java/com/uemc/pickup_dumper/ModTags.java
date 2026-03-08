@@ -6,7 +6,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Block;
 
 /**
- * Block tag keys defined by the pickup-dumper addon.
+ * Block tag keys defined by the pickup_dumper addon.
  *
  * <p>Tag JSON files live under {@code data/pickup_dumper/tags/blocks/}.
  * Players and pack authors can extend any tag via a datapack without

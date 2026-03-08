@@ -5,7 +5,7 @@ Addon para **Assistance Drone** que permite vaciar automáticamente inventario e
 ## Build local
 
 ```bash
-cd pickup-dumper
+cd pickup_dumper
 ./gradlew build
 ```
 
