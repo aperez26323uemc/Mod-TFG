@@ -31,10 +31,10 @@ jobs:
           set -euo pipefail
 
           all_mods=(
-            assistance-drone
-            farmer-drone
+            assistance_drone
+            farmer_drone
             path_lighter_drone
-            pickup-dumper
+            pickup_dumper
             pov_drone
           )
 
