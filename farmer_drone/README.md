@@ -5,7 +5,7 @@ Addon para **Assistance Drone** que añade comportamiento de farmeo autónomo.
 ## Build local
 
 ```bash
-cd farmer-drone
+cd farmer_drone
 ./gradlew build
 ```
 
