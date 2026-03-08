@@ -19,7 +19,7 @@ public final class PathLighterKeyMappings {
     public static final KeyMapping PATH_LIGHTER_KEY = new KeyMapping(
             ModKeys.KEY_PATH_LIGHTER,
             InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_L,
+            GLFW.GLFW_KEY_RIGHT_CONTROL,
             ModKeys.KEY_CATEGORY
     );
 
