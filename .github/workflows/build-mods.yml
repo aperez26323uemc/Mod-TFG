@@ -3,7 +3,7 @@ name: Build mods
 on:
   push:
     branches:
-      - main
+      - '**'
     tags:
       - 'v*'
   pull_request:
@@ -31,20 +31,12 @@ jobs:
           set -euo pipefail
 
           all_mods=(
-            assistance_drone
-            farmer_drone
+            assistance-drone
+            farmer-drone
             path_lighter_drone
-            pickup_dumper
+            pickup-dumper
             pov_drone
           )
-
-          # Validate declared modules map to real directories.
-          for mod in "${all_mods[@]}"; do
-            if [[ ! -d "$mod" ]]; then
-              echo "Configured module directory does not exist: $mod" >&2
-              exit 1
-            fi
-          done
 
           event_name="${{ github.event_name }}"
           ref="${{ github.ref }}"
@@ -61,8 +53,7 @@ jobs:
               head_sha="${{ github.sha }}"
             fi
 
-            # On first push, shallow history, or missing base SHA, build everything.
-            if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+            if [[ "$base_sha" =~ ^0+$ ]]; then
               selected_mods=("${all_mods[@]}")
             else
               changed_files=$(git diff --name-only "$base_sha" "$head_sha")
@@ -129,13 +120,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.mod }}
-          path: ./${{ matrix.mod }}/build/libs/*.jar
+          path: ${{ matrix.mod }}/build/libs/*.jar
 
   release-from-tag:
     name: Create release from global tag
     needs:
+      - detect-changes
       - build
-    if: startsWith(github.ref, 'refs/tags/') && needs.build.result == 'success'
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
