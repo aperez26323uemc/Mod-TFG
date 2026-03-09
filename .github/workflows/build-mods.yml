@@ -1,5 +1,4 @@
 name: Build mods
-
 on:
   push:
     branches:
@@ -8,10 +7,8 @@ on:
       - 'v*'
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   detect-changes:
     name: Detect changed mods
@@ -24,12 +21,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Detect changed modules
         id: detect
         run: |
           set -euo pipefail
-
           all_mods=(
             assistance_drone
             farmer_drone
@@ -37,10 +32,8 @@ jobs:
             pickup_dumper
             pov_drone
           )
-
           event_name="${{ github.event_name }}"
           ref="${{ github.ref }}"
-
           # Full build for manual runs and tags.
           if [[ "$event_name" == "workflow_dispatch" || "$ref" == refs/tags/* ]]; then
             selected_mods=("${all_mods[@]}")
@@ -52,76 +45,77 @@ jobs:
               base_sha="${{ github.event.before }}"
               head_sha="${{ github.sha }}"
             fi
-
             if [[ "$base_sha" =~ ^0+$ ]]; then
               selected_mods=("${all_mods[@]}")
             else
               changed_files=$(git diff --name-only "$base_sha" "$head_sha")
               selected_mods=()
-
               for mod in "${all_mods[@]}"; do
                 if grep -qE "^${mod}/" <<<"$changed_files"; then
                   selected_mods+=("$mod")
                 fi
               done
-
               # If CI config changes, rebuild everything.
               if grep -qE '^\.github/workflows/' <<<"$changed_files"; then
                 selected_mods=("${all_mods[@]}")
               fi
             fi
           fi
-
           if [[ ${#selected_mods[@]} -eq 0 ]]; then
             echo 'mods=[]' >> "$GITHUB_OUTPUT"
             echo 'has_changes=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
           mods_json=$(printf '%s\n' "${selected_mods[@]}" | jq -R . | jq -cs .)
           echo "mods=$mods_json" >> "$GITHUB_OUTPUT"
           echo 'has_changes=true' >> "$GITHUB_OUTPUT"
-
   build:
     name: Build ${{ matrix.mod }}
     needs: detect-changes
     if: needs.detect-changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-
     strategy:
       fail-fast: false
       matrix:
         mod: ${{ fromJson(needs.detect-changes.outputs.mods) }}
-
     defaults:
       run:
         working-directory: ${{ matrix.mod }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: gradle
-
       - name: Make Gradle executable
         run: chmod +x gradlew
-
+      - name: Run data generators
+        run: ./gradlew --no-daemon runData
+        env:
+          JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
+      - name: Verify generated data
+        run: |
+          generated=$(find src/generated/resources -name '*.json' 2>/dev/null | wc -l)
+          if [[ "$generated" -eq 0 ]]; then
+            echo "::error::runData completed but no JSON files were generated in src/generated/resources"
+            exit 1
+          fi
+          echo "✅ $generated generated file(s) found:"
+          find src/generated/resources -name '*.json' | head -30
       - name: Build mod
-        run: ./gradlew --no-daemon runData build
-
+        run: ./gradlew --no-daemon build
+        env:
+          JAVA_TOOL_OPTIONS: "-Djava.awt.headless=true"
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.mod }}
           path: ${{ matrix.mod }}/build/libs/*.jar
-
   release-from-tag:
     name: Create release from global tag
     needs:
@@ -134,7 +128,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
