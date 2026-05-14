@@ -102,32 +102,7 @@ public class DronePathLighterGoal extends Goal {
      * {@link PathLightingTask.Node#support()}, replicating what a player would do.
      */
     private boolean attemptPlacement(PathLightingTask.Node node, ItemStack stack) {
-        if (!(stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem)) return false;
-
-        net.minecraft.world.level.Level level = drone.level();
-        if (!level.getBlockState(node.placement()).canBeReplaced()) return false;
-
-        net.minecraft.world.entity.player.Player fakePlayer = null;
-        if (!level.isClientSide() && level instanceof net.minecraft.server.level.ServerLevel sl) {
-            fakePlayer = net.neoforged.neoforge.common.util.FakePlayerFactory.getMinecraft(sl);
-            fakePlayer.setXRot(drone.getXRot());
-            fakePlayer.setYRot(drone.getYRot());
-        }
-
-        var context = new net.minecraft.world.item.context.BlockPlaceContext(
-                level,
-                fakePlayer,
-                net.minecraft.world.InteractionHand.MAIN_HAND,
-                stack,
-                new net.minecraft.world.phys.BlockHitResult(
-                        net.minecraft.world.phys.Vec3.atCenterOf(node.support()),
-                        node.face(),
-                        node.support(),
-                        false
-                )
-        );
-
-        return blockItem.place(context).consumesAction();
+        return drone.getLogic().placeBlock(node.placement(), stack, node.face());
     }
 
     /** Finds the first inventory slot with a suitable light block for the given position. */

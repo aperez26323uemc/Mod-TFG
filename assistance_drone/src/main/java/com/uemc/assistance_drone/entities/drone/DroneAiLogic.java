@@ -467,7 +467,7 @@ public class DroneAiLogic {
         BlockPos clickedPos = pos.relative(face.getOpposite());
         BlockPlaceContext context = new BlockPlaceContext(
                 level, player, InteractionHand.MAIN_HAND, stack,
-                new BlockHitResult(Vec3.atCenterOf(pos), face, clickedPos, false)
+                new BlockHitResult(Vec3.atCenterOf(clickedPos), face, clickedPos, false)
         );
 
         if (blockItem.getBlock().getStateForPlacement(context) != null) {

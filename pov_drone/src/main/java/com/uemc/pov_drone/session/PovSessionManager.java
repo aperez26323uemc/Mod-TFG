@@ -86,7 +86,7 @@ public final class PovSessionManager {
                 .normalize()
                 .scale(ModKeys.DRONE_SPEED_BLOCKS_PER_TICK);
 
-        // Clamp desired position to the tether sphere.
+        // Clamp desired position to the tether.
         Vec3 anchor  = session.anchor;
         Vec3 desired = drone.position().add(velocity);
         Vec3 clamped = new Vec3(
